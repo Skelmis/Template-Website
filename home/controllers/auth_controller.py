@@ -25,6 +25,7 @@ class AuthController(Controller):
     _redirect_to = "/"
     _cookie_name = "id"
     tags = ["Authentication"]
+    include_in_schema = False
 
     @staticmethod
     def _render_template(request: Request, template: str) -> Template:
