@@ -1,0 +1,27 @@
+[project]
+name = "template-website"
+version = "0.1.0"
+description = "A templated website to scaffold from."
+requires-python = ">=3.13"
+dependencies = [
+    "infisicalsdk>=1.0.9",
+    "jinja2>=3.1.6",
+    "litestar[cryptography]>=2.16.0",
+    "logoo>=1.6.0",
+    "piccolo-admin>=1.11.0",
+    "piccolo-api>=1.6.0",
+    "piccolo[all]>=1.27.1",
+    "python-dotenv>=1.1.1",
+    "saq[hiredis,web]>=0.25.1",
+    "skelmis-commons>=1.6.1",
+    "uvicorn>=0.35.0",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "freezegun>=1.5.2",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
+    "ruff>=0.12.2",
+]

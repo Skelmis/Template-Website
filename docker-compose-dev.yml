@@ -1,0 +1,66 @@
+x-shared-variables: &common-variables
+  POSTGRES_HOST: template_db
+  POSTGRES_DB: template_db
+  POSTGRES_USER: template_db_user
+  POSTGRES_PASSWORD: product-defeat-follow-worshiper-swimwear-drown
+  POSTGRES_PORT: 2201
+  REDIS_URL: "redis://default:haziness-sloppy-cycle-deduct-superman-undertook@template_redis:2202/0"
+
+services:
+  template_db:
+    image: postgres:17
+    container_name: "template_db"
+    command: -p 2201
+    ports:
+      - "2201:2201"
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_DB: template_db
+      POSTGRES_USER: template_db_user
+      POSTGRES_PASSWORD: product-defeat-follow-worshiper-swimwear-drown
+    volumes:
+      - .db:/var/lib/postgresql/data
+  template_web:
+    build:
+      context: .
+      dockerfile: ./docker/web/Dockerfile
+    container_name: "template_web"
+    ports:
+      - "2200:2200"
+    depends_on:
+      - template_db
+      - template_redis
+    environment:
+      <<: *common-variables
+      DEBUG: 1
+      CSRF_TOKEN: 02bea54b1b317930f14317938f48d785d0adf5909bf19480fcee2fac1253e522
+  template_saq:
+    build:
+      context: .
+      dockerfile: ./docker/saq/Dockerfile
+    container_name: "template_saq"
+    depends_on:
+      - template_redis
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *common-variables
+      EXTRA_ARGS: "--web --verbose"
+  template_redis:
+    image: redis:7.4-alpine
+    container_name: "template_redis"
+    ports:
+      - '2202:2202'
+    command: redis-server --port 2202 --save 20 1 --loglevel warning --requirepass haziness-sloppy-cycle-deduct-superman-undertook
+    volumes:
+      - cache:/data
+
+volumes:
+  cache:
+    driver: local
+
+
+#networks:
+#  default:
+#    name: spook
+#    external: true
