@@ -104,7 +104,7 @@ csrf_config = CSRFConfig(
 )
 # noinspection PyTypeChecker
 rate_limit_config = RateLimitConfig(
-    rate_limit=("second", 5),
+    rate_limit=("second", 10),
     exclude=[
         "/docs",
         "/admin/",
