@@ -1,7 +1,4 @@
-import os
-
-import jinja2
-from litestar import MediaType, Request, Response, get
+from litestar import get
 from litestar.response import Template
 
 from home.util import html_template

@@ -52,7 +52,7 @@ class AuthController(Controller):
     ) -> Template | Redirect:
         # Some middleware (for example CSRF) has already awaited the request
         # body, and adds it to the request.
-        body: t.Any = request.scope.get("form")  # type: ignore
+        body: typing.Any = request.scope.get("form")  # type: ignore
 
         if not body:
             try:
@@ -191,7 +191,7 @@ class AuthController(Controller):
     async def change_password_post(self, request: Request) -> Template | Redirect:
         # Some middleware (for example CSRF) has already awaited the request
         # body, and adds it to the request.
-        body: Any = request.scope.get("form")  # type: ignore
+        body: typing.Any = request.scope.get("form")  # type: ignore
 
         if not body:
             try:
@@ -263,7 +263,7 @@ class AuthController(Controller):
 
         # Some middleware (for example CSRF) has already awaited the request
         # body, and adds it to the request.
-        body: t.Any = request.scope.get("form")  # type: ignore
+        body: typing.Any = request.scope.get("form")  # type: ignore
 
         if not body:
             try:
