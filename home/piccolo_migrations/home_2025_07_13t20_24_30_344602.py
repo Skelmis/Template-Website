@@ -3,6 +3,7 @@ from enum import Enum
 from home.util.table_mixins import utc_now
 from piccolo.columns.base import OnDelete
 from piccolo.columns.base import OnUpdate
+from piccolo.columns.column_types import Boolean
 from piccolo.columns.column_types import ForeignKey
 from piccolo.columns.column_types import Serial
 from piccolo.columns.column_types import Text
@@ -27,7 +28,7 @@ class BaseUser(Table, tablename="piccolo_user", schema=None):
     )
 
 
-ID = "2025-07-06T23:22:19:851956"
+ID = "2025-07-13T20:24:30:344602"
 VERSION = "1.27.1"
 DESCRIPTION = ""
 
@@ -39,6 +40,13 @@ async def forwards():
 
     manager.add_table(
         class_name="Alerts", tablename="alerts", schema=None, columns=None
+    )
+
+    manager.add_table(
+        class_name="Profile",
+        tablename="piccolo_user_profile",
+        schema=None,
+        columns=None,
     )
 
     manager.add_column(
@@ -172,6 +180,51 @@ async def forwards():
                     "SUCCESS": "success",
                 },
             ),
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Profile",
+        tablename="piccolo_user_profile",
+        column_name="user",
+        db_column_name="user",
+        column_class_name="ForeignKey",
+        column_class=ForeignKey,
+        params={
+            "references": BaseUser,
+            "on_delete": OnDelete.cascade,
+            "on_update": OnUpdate.cascade,
+            "target_column": None,
+            "null": True,
+            "primary_key": False,
+            "unique": True,
+            "index": True,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Profile",
+        tablename="piccolo_user_profile",
+        column_name="email_is_verified",
+        db_column_name="email_is_verified",
+        column_class_name="Boolean",
+        column_class=Boolean,
+        params={
+            "default": False,
+            "null": False,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
             "db_column_name": None,
             "secret": False,
         },
