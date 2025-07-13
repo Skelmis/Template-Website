@@ -62,6 +62,20 @@ It is recommended that if you do wish to deploy this outside of locally that the
 
 If you encounter security issues when deploying in environments that meet the above expectations I'd love to hear about it! When doing so please follow the security policy located [here](https://data.skelmis.co.nz/.well-known/security.txt) or the more user-friendly version [here](https://data.skelmis.co.nz/disclosure-policy).
 
+### Feature Set Tuning
+
+_This project is catered to my tech stack. Here are some common gotchas you may encounter_
+
+#### I don't run Logoo / OpenObserve
+
+You'll have to download the template, run `uv remove logoo` and then rip all the logging out.
+
+#### I don't use Infisical
+
+Grep for `get_secret` and replace them all with your equivalent.
+
+Please don't hard code them.
+
 ### Development
 
 #### Local Dev Env
