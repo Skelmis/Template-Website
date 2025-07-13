@@ -20,6 +20,6 @@ In saying that:
   We do render templates based on currently authed users if that extra context is available
 
 Further to this:
-  An authenticated session is created on `POST /mfa/totp` even though this route returns the registration details. This is because we need user details to check the code against, and *technically* MFA has been set up in the servers eyes.
+  An authenticated session is created on `POST /mfa/totp/create` even though this route returns the registration details. This is because we need user details to check the code against, and *technically* MFA has been set up in the servers eyes.
 
-  We accept the risk that this action soft locks accounts out. To help mitigate however, `POST /mfa/totp/confirm` will also redirect to the MFA deletion page if it fails
+  We accept the risk that this action may soft lock accounts out. To help mitigate however, `POST /mfa/totp/confirm` will also redirect to the MFA deletion page if it fails
