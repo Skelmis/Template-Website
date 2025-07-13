@@ -20,6 +20,7 @@ from litestar.types import Receive, Scope, Send
 from piccolo.apps.user.tables import BaseUser
 from piccolo.engine import engine_finder
 from piccolo_admin.endpoints import create_admin, TableConfig
+from piccolo_api.crud.endpoints import OrderBy
 from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 
 from home import constants
@@ -47,6 +48,9 @@ async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
             AuthenticatorSecret.secret,
             AuthenticatorSecret.recovery_codes,
             AuthenticatorSecret.last_used_code,
+        ],
+        order_by=[
+            OrderBy(AuthenticatorSecret.id, ascending=False),
         ],
     )
     profile_tc = TableConfig(Profile, menu_group="User Management")
