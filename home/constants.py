@@ -50,6 +50,9 @@ IS_PRODUCTION: bool = not value_to_bool(os.environ.get("DEBUG"))
 ALLOW_REGISTRATION: bool = value_to_bool(os.environ.get("ALLOW_REGISTRATION", True))
 """Whether users should be allowed to create new accounts."""
 
+SERVING_DOMAIN: list[str] = os.environ.get("SERVING_DOMAIN", "localhost").split(",")
+"""The domain this site will run on. Used for cookies etc."""
+
 CHECK_PASSWORD_AGAINST_HIBP: bool = not value_to_bool(
     os.environ.get("DISABLE_HIBP", False)
 )

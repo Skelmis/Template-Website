@@ -62,7 +62,7 @@ async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
             profile_tc,
         ],
         production=IS_PRODUCTION,
-        allowed_hosts=["data.skelmis.co.nz"],
+        allowed_hosts=[constants.SERVING_DOMAIN],
         sidebar_links={"Site root": "/", "API documentation": "/docs/"},
         site_name=constants.SITE_NAME.rstrip() + " Admin",
         auto_include_related=True,
