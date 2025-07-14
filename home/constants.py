@@ -6,6 +6,8 @@ import logoo
 from commons import value_to_bool
 from dotenv import load_dotenv
 from infisical_sdk import InfisicalSDKClient
+from piccolo_api.encryption.providers import XChaCha20Provider
+from piccolo_api.mfa.authenticator.provider import AuthenticatorProvider
 
 load_dotenv()
 infisical_client = InfisicalSDKClient(host="https://secrets.skelmis.co.nz")
@@ -39,6 +41,9 @@ primary_logger = logoo.PrimaryLogger(
         "service": "data_site",
     },
 )
+SITE_NAME: str = os.environ.get("SITE_NAME", "Template Website")
+"""The site name for usage in templates etc"""
+
 IS_PRODUCTION: bool = not value_to_bool(os.environ.get("DEBUG"))
 """Are we in production?"""
 
@@ -57,3 +62,18 @@ MAKE_FIRST_USER_ADMIN: bool = value_to_bool(
     os.environ.get("MAKE_FIRST_USER_ADMIN", True)
 )
 """Makes the first user to sign in admin. Just makes life easier."""
+
+REQUIRE_MFA: bool = value_to_bool(os.environ.get("REQUIRE_MFA", False))
+"""Enforces the usage of MFA for authentication.
+
+Due to platform limitations, it won't be enforced if users
+only sign in via the admin portal.
+"""
+
+SESSION_KEY = bytes.fromhex(get_secret("SESSION_KEY", infisical_client))
+CSRF_TOKEN = get_secret("CSRF_TOKEN", infisical_client)
+ENCRYPTION_KEY = bytes.fromhex(get_secret("ENCRYPTION_KEY", infisical_client))
+ENCRYPTION_PROVIDER = XChaCha20Provider(ENCRYPTION_KEY)
+MFA_TOTP_PROVIDER = AuthenticatorProvider(
+    ENCRYPTION_PROVIDER, issuer_name=SITE_NAME, valid_window=1
+)

@@ -6,4 +6,10 @@ load_dotenv()
 
 DB = SQLiteEngine(path="test_suite.sqlite")
 
-APP_REGISTRY = AppRegistry(apps=["home.piccolo_app", "piccolo_admin.piccolo_app"])
+APP_REGISTRY = AppRegistry(
+    apps=[
+        "home.piccolo_app",
+        "piccolo_admin.piccolo_app",
+        "piccolo_api.mfa.authenticator.piccolo_app",
+    ]
+)

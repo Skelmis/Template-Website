@@ -20,6 +20,8 @@ from litestar.types import Receive, Scope, Send
 from piccolo.apps.user.tables import BaseUser
 from piccolo.engine import engine_finder
 from piccolo_admin.endpoints import create_admin, TableConfig
+from piccolo_api.crud.endpoints import OrderBy
+from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 
 from home import constants
 from home.constants import IS_PRODUCTION
@@ -29,6 +31,7 @@ from home.endpoints import (
 )
 from home.exception_handlers import redirect_for_auth, RedirectForAuth, handle_500
 from home.middleware import EnsureAuth
+from home.tables import Profile
 from home.util.flash import inject_alerts
 
 load_dotenv()
@@ -38,16 +41,32 @@ load_dotenv()
 @asgi("/admin/", is_mount=True, copy_scope=True)
 async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
     user_tc = TableConfig(BaseUser, menu_group="User Management")
+    mfa_tc = TableConfig(
+        AuthenticatorSecret,
+        menu_group="User Management",
+        exclude_visible_columns=[
+            AuthenticatorSecret.secret,
+            AuthenticatorSecret.recovery_codes,
+            AuthenticatorSecret.last_used_code,
+        ],
+        order_by=[
+            OrderBy(AuthenticatorSecret.id, ascending=False),
+        ],
+    )
+    profile_tc = TableConfig(Profile, menu_group="User Management")
 
     await create_admin(
         tables=[
             user_tc,
+            mfa_tc,
+            profile_tc,
         ],
         production=IS_PRODUCTION,
         allowed_hosts=["data.skelmis.co.nz"],
         sidebar_links={"Site root": "/", "API documentation": "/docs/"},
-        site_name="Template Admin",
+        site_name=constants.SITE_NAME.rstrip() + " Admin",
         auto_include_related=True,
+        mfa_providers=[constants.MFA_TOTP_PROVIDER],
     )(scope, receive, send)
 
 
@@ -86,9 +105,8 @@ cors_config = CORSConfig(
     allow_methods=[],
     allow_credentials=False,
 )
-CSRF_TOKEN = constants.get_secret("CSRF_TOKEN", constants.infisical_client)
 csrf_config = CSRFConfig(
-    secret=CSRF_TOKEN,
+    secret=constants.CSRF_TOKEN,
     # Aptly named so it doesnt clash
     # with piccolo 'csrftoken' cookies
     cookie_name="csrf_token",
@@ -124,10 +142,7 @@ template_config = TemplateConfig(
 flash_plugin = FlashPlugin(
     config=FlashConfig(template_config=template_config),
 )
-SESSION_KEY = bytes.fromhex(
-    constants.get_secret("SESSION_KEY", constants.infisical_client)
-)
-session_config = CookieBackendConfig(secret=SESSION_KEY)
+session_config = CookieBackendConfig(secret=constants.SESSION_KEY)
 exception_handlers: dict[..., ...] = {
     RedirectForAuth: redirect_for_auth,
 }
@@ -144,7 +159,7 @@ app = Litestar(
     on_shutdown=[close_database_connection_pool],
     debug=not IS_PRODUCTION,
     openapi_config=OpenAPIConfig(
-        title="Template API",
+        title=constants.SITE_NAME.rstrip() + " API",
         version="0.0.0",
         render_plugins=[SwaggerRenderPlugin()],
         path="/docs",

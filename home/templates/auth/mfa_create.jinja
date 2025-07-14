@@ -1,13 +1,15 @@
 {% extends 'base.jinja' %}
-{% block title %}Sign In{% endblock %}
+{% block title %}Configure MFA{% endblock %}
 {% block content %}
     <div class="page page-center">
         <div class="container container-tight py-4">
             {% include 'alerts.jinja' %}
             <div class="card card-md">
                 <div class="card-body">
-                    <h2 class="h2 text-center mb-4">Sign in to your account</h2>
-                    <form method="POST" autocomplete="off" novalidate>
+                    <h2 class="h2 text-center mb-4">Configure Multi-Factor Authentication (MFA) for your account</h2>
+                    <small>By entering your username and password below we will create MFA for you. This will pop up on a subsequent screen for you to save and then use later.</small>
+                    <br>
+                    <form method="POST" autocomplete="off" novalidate action="{{ url_for('create_totp_mfa') }}">
                         {% if csrftoken and csrf_cookie_name %}
                             <input type="hidden" name="{{ csrf_cookie_name }}" value="{{ csrftoken }}"/>
                         {% endif %}
@@ -26,35 +28,17 @@
                             </div>
                         </div>
 
-                        <div class="mb-2">
-                            <label class="form-label">
-                                Multi-Factor Authentication (MFA)
-                            </label>
-                            <div class="input-group input-group-flat">
-                                <input name="mfa" type="text" class="form-control" placeholder="Your MFA"
-                                       autocomplete="off">
-                            </div>
-                            <div>
-                                <small class="form-hint">
-                                    Only provide MFA if you have it configured.
-                                </small>
-                            </div>
-                        </div>
-                        <span class="form-label">
-                          <a href="{{ url_for('forgot_password') }}" tabindex="-1">I forgot my password</a>
-                        </span>
 
                         <div class="form-footer">
-                            <button type="submit" class="btn btn-primary w-100">Sign in</button>
+                            <button type="submit" class="btn btn-primary w-100">Create MFA</button>
                         </div>
                     </form>
                 </div>
+
             </div>
-            {% if has_registration %}
-                <div class="text-center text-secondary mt-3">
-                    Don't have account yet? <a href="{{ url_for('sign_up') }}" tabindex="-1">Sign up</a>
+        <div class="text-center text-secondary mt-3">
+                    <a href="/" tabindex="-1">Take me home</a>
                 </div>
-            {% endif %}
         </div>
     </div>
 {% endblock %}

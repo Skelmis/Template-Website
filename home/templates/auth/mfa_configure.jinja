@@ -1,0 +1,59 @@
+{% extends 'base.jinja' %}
+{% block title %}Delete MFA{% endblock %}
+{% macro button(display_text, btn_id, btn_title, btn_description, btn_confirm, setting_url, btn_theme='info') %}
+    <a href="#" class="btn btn-outline-{{ btn_theme }} w-100" data-bs-toggle="modal" data-bs-target="#{{ btn_id }}">
+        {{ display_text }}
+    </a>
+    <div class="modal modal-blur fade" id="{{ btn_id }}" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <div class="modal-title">{{ btn_title }}</div>
+                    <div>{{ btn_description }}</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Cancel
+                    </button>
+                    <form action="{{ setting_url }}" method="POST">
+                        {{ csrf_input|safe }}
+                        <button type="submit" class="btn btn-danger" data-bs-dismiss="modal">{{ btn_confirm }}</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endmacro %}
+{% block content %}
+    <div class="page">
+        <div class="page-body">
+            <div class="container-xl">
+                {% include 'alerts.jinja' %}
+                <div class="row row-cards">
+                    <div class="col-md-6 col-lg-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">MFA Status</h3>
+                            </div>
+                            <div class="card-body">
+                                You currently have MFA configured.<br><br>
+                                <h6>Note this will always say configured as otherwise it will kick you to the creation
+                                    form.</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Delete MFA</h3>
+                            </div>
+                            <div class="card-body">
+                                <h6>This is a permanent action. If this site requires MFA you will need to reconfigure it.</h6>
+                                {{ button('Delete MFA for account', 'delete-mfa', 'Delete MFA', 'Are you sure you want to delete your MFA?', 'Yes', url_for('mfa_totp_delete'), 'danger') }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

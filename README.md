@@ -33,6 +33,7 @@ These are environment variables by default. If `(Infisical)` is shown, then they
 - `LOGOO_STREAM` (Infisical): OpenObserve logging stream.
 - `LOGOO_USER` (Infisical): OpenObserve username.
 - `LOGOO_PASSWORD` (Infisical): OpenObserve password.
+- `ENCRYPTION_KEY` (Infisical): An encryption key used to do things such as encrypt MFA secrets. See [here](https://piccolo-admin.readthedocs.io/en/latest/mfa/index.html#example) for how to generate.
 - `POSTGRES_DB`: The Postgres database to use.
 - `POSTGRES_USER`: The Postgres user to auth as.
 - `POSTGRES_PASSWORD`: The password for said Postgres user.
@@ -44,10 +45,12 @@ These are environment variables by default. If `(Infisical)` is shown, then they
 ##### Optional
 *These are optional feature flags to provide*
 
+- `SITE_NAME`: The name of the site to use in navbar, admin panel etc. Defaults to `Template Website`
 - `DEBUG`: If set to a truthy value, dump tracebacks etc on error. Defaults to `false`
 - `ALLOW_REGISTRATION`: Whether to let user's self sign up for accounts on the platform. Defaults to `true`. If you want to disable this, set it to `false`.
 - `DISABLE_HIBP`: If set to a truthy value, bypass the Have I Been Pwned checks on passwords. Defaults to `false`.
 - `MAKE_FIRST_USER_ADMIN`: If truthy, makes the first user created admin. Just simplifies things. Defaults to `true`
+- `REQUIRE_MFA`: If truthy, enforce the usage of Multi-Factor Authentication (MFA) within auth flows. N.b due to platform limitations it won't be enforced if users only ever sign in via the admin portal. Defaults to `false`
 
 #### Deployment Hardening
 
