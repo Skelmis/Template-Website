@@ -1,5 +1,6 @@
 import os
 import re
+from datetime import timedelta
 
 import commons
 import logoo
@@ -73,6 +74,13 @@ Due to platform limitations, it won't be enforced if users
 only sign in via the admin portal.
 """
 
+DONT_SEND_EMAILS: bool = value_to_bool(os.environ.get("DONT_SEND_EMAILS", False))
+"""If True, prints emails to console instead of sending them"""
+
+MAGIC_LINK_VALIDITY_WINDOW = timedelta(minutes=5)
+"""How long since it is sent can a link be used to authenticate"""
+
+
 SESSION_KEY = bytes.fromhex(get_secret("SESSION_KEY", infisical_client))
 CSRF_TOKEN = get_secret("CSRF_TOKEN", infisical_client)
 ENCRYPTION_KEY = bytes.fromhex(get_secret("ENCRYPTION_KEY", infisical_client))
@@ -80,3 +88,4 @@ ENCRYPTION_PROVIDER = XChaCha20Provider(ENCRYPTION_KEY)
 MFA_TOTP_PROVIDER = AuthenticatorProvider(
     ENCRYPTION_PROVIDER, issuer_name=SITE_NAME, valid_window=1
 )
+MAILGUN_API_KEY = get_secret("MAILGUN_API_KEY", infisical_client)

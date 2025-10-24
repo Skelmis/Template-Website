@@ -1,25 +1,28 @@
 import hmac
+import secrets
 import typing
 import warnings
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 
 from commons.hibp import has_password_been_pwned
 from litestar import Controller, Request, get, post
-from litestar.exceptions import SerializationException, HTTPException
-from litestar.response import Template, Redirect
+from litestar.exceptions import SerializationException
+from litestar.response import Redirect, Template
 from litestar.status_codes import HTTP_303_SEE_OTHER
-from piccolo.apps.user.tables import BaseUser
 from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 from piccolo_api.session_auth.tables import SessionsBase
 
 from home import constants
 from home.middleware import EnsureAuth
-from home.util import html_template, alert
+from home.tables import MagicLinks, Users
+from home.util import alert, html_template
+from home.util.email import send_email
+from home.util.table_mixins import utc_now
 
 
 class AuthController(Controller):
     path = "/auth"
-    _auth_table = BaseUser
+    _auth_table = Users
     _mfa_table = AuthenticatorSecret
     _session_table = SessionsBase
     _session_expiry = timedelta(hours=6)
@@ -30,9 +33,15 @@ class AuthController(Controller):
     include_in_schema = False
 
     @staticmethod
-    def _render_template(request: Request, template: str) -> Template:
+    def _render_template(
+        request: Request, template: str, context: dict = None
+    ) -> Template:
         csrftoken = request.scope.get("csrftoken")  # type: ignore
         csrf_cookie_name = request.scope.get("csrf_cookie_name")  # type: ignore
+
+        if context is None:
+            context = {}
+
         return html_template(
             template,
             {
@@ -40,18 +49,19 @@ class AuthController(Controller):
                 "csrf_cookie_name": csrf_cookie_name,
                 "request": request,
                 "has_registration": constants.ALLOW_REGISTRATION,
+                **context,
             },
         )
 
     @classmethod
     async def get_user_for_creds(
         cls, request: Request, username: str, password: str
-    ) -> tuple[BaseUser | None, Redirect | Template | None]:
+    ) -> tuple[Users | None, Redirect | Template | None]:
         """Standard auth flow related to a password
 
         Returns
         -------
-        tuple[BaseUser | None, Redirect | Template | None]
+        tuple[Users | None, Redirect | Template | None]
             The user if auth is correct else a redirect/template to expected page
         """
         if (not username) or (not password):
@@ -71,8 +81,8 @@ class AuthController(Controller):
             )
             return None, cls._render_template(request, "auth/sign_in.jinja")
 
-        user_is_active = await BaseUser.exists().where(
-            (BaseUser.id == user_id) & (BaseUser.active.eq(True))
+        user_is_active = await Users.exists().where(
+            (Users.id == user_id) & (Users.active.eq(True))
         )
         if not user_is_active:
             alert(request, "User is currently disabled.", level="error")
@@ -104,7 +114,7 @@ class AuthController(Controller):
         return username, password, mfa
 
     @classmethod
-    async def create_session_for_user(cls, user: BaseUser) -> str:
+    async def create_session_for_user(cls, user: Users) -> str:
         if not constants.IS_PRODUCTION:
             message = (
                 "If running sessions in production, make sure 'production' "
@@ -125,7 +135,7 @@ class AuthController(Controller):
         return typing.cast(str, session.token)
 
     async def confirm_mfa_was_correct(
-        self, request: Request, user: BaseUser, mfa_code: str
+        self, request: Request, user: Users, mfa_code: str
     ) -> Redirect | bool | None:
         """Returns None if MFA was valid, Redirect if it needs configuring and False if incorrect"""
         user_is_enrolled = await constants.MFA_TOTP_PROVIDER.is_user_enrolled(user)
@@ -151,11 +161,170 @@ class AuthController(Controller):
 
         return None
 
-    @get("/sign_in", name="sign_in")
-    async def sign_in_get(self, request: Request) -> Template:
-        return self._render_template(request, "auth/sign_in.jinja")
+    @get("/sign_in", name="sign_in_email")
+    async def magic_link_get(
+        self,
+        request: Request,
+        next_route: str = "/",
+    ) -> Template:
+        return self._render_template(
+            request, "auth/sign_in_email.jinja", {"next_route": next_route}
+        )
 
     @post("/sign_in")
+    async def magic_link_post(
+        self,
+        request: Request,
+        next_route: str = "/",
+    ) -> Template | Redirect:
+        body: typing.Any = request.scope.get("form")  # type: ignore
+
+        if not body:
+            try:
+                body = await request.json()
+            except SerializationException:
+                body = await request.form()
+
+        email = body.get("email", None)
+        if email is None:
+            alert(request, "Please provide an email", level="error")
+            return Redirect(request.url_for("sign_in_email"))
+
+        if not constants.SIMPLE_EMAIL_REGEX.match(email):
+            alert(request, "Please enter a valid email.", level="error")
+            return Redirect(request.url_for("sign_in_email"))
+
+        magic_link = MagicLinks(
+            email=email,
+            token=MagicLinks.generate_token(),
+            cookie=MagicLinks.generate_token(),
+        )
+        await magic_link.save()
+        await send_email(
+            email,
+            "Sign In Link",
+            html=f"Click the following link to sign in: http://127.0.0.1:8000"
+            f"/auth/sign_in/callback?next_route={next_route}&token={magic_link.token}",
+        )
+        alert(
+            request,
+            "I've sent you an email to sign in, please go and click it.",
+            level="success",
+        )
+        response = Redirect(request.url_for("sign_in_email"))
+        response.set_cookie(
+            key="magic_link_token",
+            value=magic_link.cookie,
+            httponly=True,
+            secure=constants.IS_PRODUCTION,
+            max_age=int(self._max_session_expiry.total_seconds()),
+            samesite="lax",
+        )
+        return response
+
+    @get("/sign_in/callback", name="sign_in_email_callback")
+    async def magic_link_token_get(
+        self,
+        request: Request,
+        token: str,
+        next_route: str = "/",
+    ) -> Template | Redirect:
+        magic_link: MagicLinks = await MagicLinks.objects().get(
+            (MagicLinks.token == token) & (MagicLinks.used_at.is_null())
+        )
+        if not magic_link or (magic_link and magic_link.is_still_valid is False):
+            alert(request, "Sorry that's an invalid token", level="error")
+            return Redirect(request.url_for("sign_in_email"))
+
+        user_exists = await Users.exists().where(Users.username == magic_link.email)  # type: ignore
+
+        return self._render_template(
+            request,
+            "auth/sign_in_email_callback.jinja",
+            {"email": magic_link.email, "requires_info": not user_exists},
+        )
+
+    @post("/sign_in/callback")
+    async def magic_link_token_post(
+        self, request: Request, token: str, next_route: str = "/"
+    ) -> Redirect | Template:
+        magic_link: MagicLinks = await MagicLinks.objects().get(
+            (MagicLinks.token == token) & (MagicLinks.used_at.is_null())
+        )
+        if not magic_link or (magic_link and magic_link.is_still_valid is False):
+            alert(request, "Sorry that's an invalid token", level="error")
+            return Redirect(request.url_for("sign_in_email"))
+
+        if request.cookies.get("magic_link_token") == magic_link.cookie:
+            magic_link.used_in_same_request_browser = True
+
+        user = await Users.objects().get(Users.username == magic_link.email)  # type: ignore
+        if not user:
+            body = await request.form()
+            name = body.get("name", None)
+            phone = body.get("phone", None)
+            newsletter_signup_consented = body.get("newsletter", "") == "on"
+            failed = False
+            if name is None or not name:
+                alert(request, "Sorry but we need your name to proceed", level="error")
+                failed = True
+
+            if phone is None or not phone:
+                alert(
+                    request,
+                    "Sorry but we need your phone number to proceed",
+                    level="error",
+                )
+                failed = True
+
+            if failed:
+                return self._render_template(
+                    request,
+                    "auth/sign_in_email_callback.jinja",
+                    {"email": magic_link.email, "requires_info": True},
+                )
+
+            user = Users(
+                username=magic_link.email,
+                name=name,
+                signed_up_for_newsletter=newsletter_signup_consented,
+                email=magic_link.email,
+                password=secrets.token_hex(64),
+                active=True,
+                auths_via_magic_link=True,
+                phone_number=phone,
+            )
+
+        user.last_login = datetime.now()
+        await user.save()
+
+        magic_link.used_at = utc_now()
+        await magic_link.save()
+
+        alert(request, "Thanks for signing in", level="success")
+
+        # Basic open redirect checks
+        if not next_route.startswith("/"):
+            next_route = "/"
+
+        response: Redirect = Redirect(next_route)
+        cookie = await self.create_session_for_user(user)
+        response.set_cookie(
+            key=self._cookie_name,
+            value=cookie,
+            httponly=True,
+            secure=constants.IS_PRODUCTION,
+            max_age=int(self._max_session_expiry.total_seconds()),
+            samesite="lax",
+        )
+        response.delete_cookie("magic_link_token")
+        return response
+
+    @get("/sign_in/credentials", name="sign_in")
+    async def sign_in_get(self, request: Request, next_route: str = "/") -> Template:
+        return self._render_template(request, "auth/sign_in.jinja")
+
+    @post("/sign_in/credentials")
     async def sign_in_post(
         self,
         request: Request,
@@ -325,6 +494,34 @@ class AuthController(Controller):
         return Redirect(request.url_for("forgot_password"))
 
     @get(
+        "/details/change",
+        name="change_details",
+        middleware=[EnsureAuth],
+    )
+    async def get_change_details(self, request: Request) -> Template:
+        return self._render_template(request, "auth/change_details.jinja")
+
+    @post(
+        "/details/change",
+        middleware=[EnsureAuth],
+    )
+    async def post_change_details(self, request: Request) -> Template:
+        body = await request.form()
+        name = body.get("name")
+        if not name:
+            alert(request, "Setting a name is required", level="error")
+            return self._render_template(request, "auth/change_details.jinja")
+
+        phone = body.get("phone")
+        signed_up_for_newsletter = body.get("newsletter") == "on"
+        request.user.name = name
+        request.user.phone_number = phone
+        request.user.signed_up_for_newsletter = signed_up_for_newsletter
+        await request.user.save()
+        alert(request, "Thanks, I have saved your details", level="success")
+        return self._render_template(request, "auth/change_details.jinja")
+
+    @get(
         "/passwords/change",
         name="change_password",
         middleware=[EnsureAuth],
@@ -360,12 +557,12 @@ class AuthController(Controller):
             alert(request, "New password fields did not match.", level="error")
             return Redirect(request.url_for("change_password"))
 
-        user = typing.cast(BaseUser, request.user)
-        algorithm, iterations_, salt, hashed = BaseUser.split_stored_password(
+        user = typing.cast(Users, request.user)
+        algorithm, iterations_, salt, hashed = Users.split_stored_password(
             user.password
         )
         iterations = int(iterations_)
-        if BaseUser.hash_password(current_password, salt, iterations) != user.password:
+        if Users.hash_password(current_password, salt, iterations) != user.password:
             alert(request, "Your current password was wrong.", level="error")
             return Redirect(request.url_for("change_password"))
 
@@ -446,8 +643,8 @@ class AuthController(Controller):
             return self._render_template(request, "auth/sign_up.jinja")
 
         # noinspection PyTypeChecker
-        if await BaseUser.exists().where(
-            BaseUser.username == username,
+        if await Users.exists().where(
+            Users.username == username,
         ):
             alert(
                 request,
@@ -457,7 +654,7 @@ class AuthController(Controller):
             return self._render_template(request, "auth/sign_up.jinja")
 
         try:
-            user: BaseUser = await BaseUser.create_user(
+            user: Users = await Users.create_user(
                 username, password, email=email, active=True
             )
         except ValueError as err:
@@ -469,7 +666,7 @@ class AuthController(Controller):
             "Thanks for creating an account, you may now sign in.",
             level="success",
         )
-        if constants.MAKE_FIRST_USER_ADMIN and await BaseUser.count() == 1:
+        if constants.MAKE_FIRST_USER_ADMIN and await Users.count() == 1:
             alert(
                 request,
                 "As you are the first user on the system, "

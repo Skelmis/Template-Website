@@ -31,7 +31,7 @@ from home.endpoints import (
 )
 from home.exception_handlers import redirect_for_auth, RedirectForAuth, handle_500
 from home.middleware import EnsureAuth
-from home.tables import Profile
+from home.tables import Users
 from home.util.flash import inject_alerts
 
 load_dotenv()
@@ -40,7 +40,7 @@ load_dotenv()
 # mounting Piccolo Admin
 @asgi("/admin/", is_mount=True, copy_scope=True)
 async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
-    user_tc = TableConfig(BaseUser, menu_group="User Management")
+    user_tc = TableConfig(Users, menu_group="User Management")
     mfa_tc = TableConfig(
         AuthenticatorSecret,
         menu_group="User Management",
@@ -53,20 +53,19 @@ async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
             OrderBy(AuthenticatorSecret.id, ascending=False),
         ],
     )
-    profile_tc = TableConfig(Profile, menu_group="User Management")
 
     await create_admin(
         tables=[
             user_tc,
             mfa_tc,
-            profile_tc,
         ],
         production=IS_PRODUCTION,
-        allowed_hosts=[constants.SERVING_DOMAIN],
+        allowed_hosts=constants.SERVING_DOMAIN,
         sidebar_links={"Site root": "/", "API documentation": "/docs/"},
         site_name=constants.SITE_NAME.rstrip() + " Admin",
         auto_include_related=True,
         mfa_providers=[constants.MFA_TOTP_PROVIDER],
+        auth_table=Users,  # type: ignore
     )(scope, receive, send)
 
 

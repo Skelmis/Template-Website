@@ -1,4 +1,5 @@
 from .alerts import Alerts, AlertLevels
-from .profile import Profile
+from .user import Users
+from .magic_links import MagicLinks
 
-__all__ = ("Alerts", "AlertLevels", "Profile")
+__all__ = ("Alerts", "AlertLevels", "Users", "MagicLinks")
