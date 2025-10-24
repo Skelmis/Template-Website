@@ -161,7 +161,7 @@ class AuthController(Controller):
 
         return None
 
-    @get("/sign_in", name="sign_in_email")
+    @get("/sign_in/magic_link", name="sign_in_email")
     async def magic_link_get(
         self,
         request: Request,
@@ -171,7 +171,7 @@ class AuthController(Controller):
             request, "auth/sign_in_email.jinja", {"next_route": next_route}
         )
 
-    @post("/sign_in")
+    @post("/sign_in/magic_link")
     async def magic_link_post(
         self,
         request: Request,
@@ -192,6 +192,13 @@ class AuthController(Controller):
 
         if not constants.SIMPLE_EMAIL_REGEX.match(email):
             alert(request, "Please enter a valid email.", level="error")
+            return Redirect(request.url_for("sign_in_email"))
+
+        user_exists = await Users.exists().where(Users.username == email)  # type: ignore
+        if not constants.ALLOW_REGISTRATION and not user_exists:
+            alert(
+                request, "Sorry, we currently don't allow registration", level="error"
+            )
             return Redirect(request.url_for("sign_in_email"))
 
         magic_link = MagicLinks(
@@ -222,7 +229,7 @@ class AuthController(Controller):
         )
         return response
 
-    @get("/sign_in/callback", name="sign_in_email_callback")
+    @get("/sign_in/magic_link/callback", name="sign_in_email_callback")
     async def magic_link_token_get(
         self,
         request: Request,
@@ -244,7 +251,7 @@ class AuthController(Controller):
             {"email": magic_link.email, "requires_info": not user_exists},
         )
 
-    @post("/sign_in/callback")
+    @post("/sign_in/magic_link/callback")
     async def magic_link_token_post(
         self, request: Request, token: str, next_route: str = "/"
     ) -> Redirect | Template:

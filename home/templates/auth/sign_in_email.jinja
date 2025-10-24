@@ -11,12 +11,12 @@
                         {% if csrftoken and csrf_cookie_name %}
                             <input type="hidden" name="{{ csrf_cookie_name }}" value="{{ csrftoken }}"/>
                         {% endif %}
-                    <div>
-                                <small class="form-hint">
-                                    We'll email you a sign-in link that provides access to the website.
-                                </small>
-                            </div>
-                    <br>
+                        <div>
+                            <small class="form-hint">
+                                We'll email you a sign-in link that provides access to the website.
+                            </small>
+                        </div>
+                        <br>
                         <div class="mb-3">
                             <label class="form-label">Email</label>
                             <input name="email" type="text" class="form-control" placeholder="Your email address"
@@ -30,9 +30,17 @@
                     </form>
                 </div>
             </div>
-        <div class="text-center text-secondary mt-3">
-                    Got a password? <a href="{{ url_for('sign_in') }}?next_route={{ next_route }}" tabindex="-1">Sign in here</a>
-                </div>
+            <div class="text-center text-secondary mt-3">
+                <p>
+                    Got a password? <a href="{{ url_for('sign_in') }}?next_route={{ next_route }}" tabindex="-1">Sign in
+                    here</a>
+                </p>
+                {% if has_registration %}
+                    <p>Want to create an account with a password? <a href="{{ url_for('sign_up') }}?next_route={{ next_route }}"
+                                                  tabindex="-1">Click Here</a>
+                    </p>
+                {% endif %}
+            </div>
         </div>
     </div>
 {% endblock %}

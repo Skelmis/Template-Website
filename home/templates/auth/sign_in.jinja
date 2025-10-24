@@ -50,11 +50,14 @@
                     </form>
                 </div>
             </div>
-            {% if has_registration %}
-                <div class="text-center text-secondary mt-3">
-                    Don't have account yet? <a href="{{ url_for('sign_up') }}" tabindex="-1">Sign up</a>
-                </div>
-            {% endif %}
+            <div class="text-center text-secondary mt-3">
+            <p>Want to sign in via email link? <a href="{{ url_for('sign_in_email') }}?next_route={{ next_route }}" tabindex="-1">Click Here</a></p>
+                {% if has_registration %}
+                    <p>Don't have account yet? <a href="{{ url_for('sign_up') }}?next_route={{ next_route }}"
+                                                  tabindex="-1">Sign up</a>
+                    </p>
+                {% endif %}
+            </div>
         </div>
     </div>
 {% endblock %}
