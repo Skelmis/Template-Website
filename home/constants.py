@@ -1,12 +1,22 @@
+import base64
+import logging
 import os
 import re
+from copy import deepcopy
 from datetime import timedelta
 
-import commons
-import logoo
 from commons import value_to_bool
 from dotenv import load_dotenv
 from infisical_sdk import InfisicalSDKClient
+from opentelemetry import trace
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from piccolo_api.encryption.providers import XChaCha20Provider
 from piccolo_api.mfa.authenticator.provider import AuthenticatorProvider
 
@@ -18,30 +28,54 @@ infisical_client.auth.universal_auth.login(
 )
 
 
+def configure_otel():
+    # Service name is required for most backends
+    stream = get_secret("LOGOO_STREAM", infisical_client)
+    resource = Resource(attributes={SERVICE_NAME: stream})
+    trace_provider = TracerProvider(resource=resource)
+    log_url = "https://logs.skelmis.co.nz/api/default/v1/logs"
+    trace_url = "https://logs.skelmis.co.nz/api/default/v1/traces"
+    headers = {
+        "Authorization": f"Basic {
+        base64.b64encode(
+            bytes(
+                get_secret("LOGOO_USER", infisical_client) 
+                + ":" + get_secret("LOGOO_PASSWORD", infisical_client)
+                , "utf-8")
+        ).decode("utf-8")}"
+    }
+    trace_exporter = OTLPSpanExporter(endpoint=trace_url, headers=headers)
+    span_processor = BatchSpanProcessor(trace_exporter)
+    trace_provider.add_span_processor(span_processor)
+    # Sets the global default tracer provider
+    trace.set_tracer_provider(trace_provider)
+
+    logger_provider = LoggerProvider(resource=resource)
+    set_logger_provider(logger_provider)
+    log_headers = deepcopy(headers)
+    log_headers["stream-name"] = stream
+    log_exporter = OTLPLogExporter(endpoint=log_url, headers=log_headers)
+    log_batch = BatchLogRecordProcessor(log_exporter)
+    logger_provider.add_log_record_processor(log_batch)
+    handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
+    logging.basicConfig(
+        handlers=[handler],
+        level=logging.DEBUG,
+        format="%(message)s",
+        datefmt="%I:%M:%S %p %d/%m/%Y",
+    )
+
+
 def get_secret(secret_name: str, infisical_client: InfisicalSDKClient) -> str:
     return infisical_client.secrets.get_secret_by_name(
         secret_name=secret_name,
         project_id=os.environ["INFISICAL_PROJECT_ID"],
-        environment_slug=(
-            "dev" if commons.value_to_bool(os.environ.get("DEBUG")) else "prod",
-        ),
+        environment_slug=os.environ["INFISICAL_SLUG"],
         secret_path="/",
         view_secret_value=True,
     ).secretValue
 
 
-primary_logger = logoo.PrimaryLogger(
-    __name__,
-    base_url="https://logs.skelmis.co.nz",
-    org="default",
-    stream=get_secret("LOGOO_STREAM", infisical_client),
-    username=get_secret("LOGOO_USER", infisical_client),
-    password=get_secret("LOGOO_PASSWORD", infisical_client),
-    poll_time=15,
-    global_metadata={
-        "service": "data_site",
-    },
-)
 SITE_NAME: str = os.environ.get("SITE_NAME", "Template Website")
 """The site name for usage in templates etc"""
 

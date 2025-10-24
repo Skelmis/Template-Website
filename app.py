@@ -6,7 +6,9 @@ from litestar import Litestar, asgi, Request
 from litestar.config.cors import CORSConfig
 from litestar.config.csrf import CSRFConfig
 from litestar.contrib.jinja import JinjaTemplateEngine
+from litestar.contrib.opentelemetry import OpenTelemetryPlugin, OpenTelemetryConfig
 from litestar.datastructures import ResponseHeader
+from litestar.exceptions import NotFoundException
 from litestar.middleware.rate_limit import RateLimitConfig
 from litestar.middleware.session.client_side import CookieBackendConfig
 from litestar.openapi import OpenAPIConfig
@@ -16,7 +18,7 @@ from litestar.plugins.flash import FlashPlugin, FlashConfig
 from litestar.static_files import StaticFilesConfig
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from litestar.template import TemplateConfig
-from litestar.types import Receive, Scope, Send
+from litestar.types import Receive, Scope, Send, Empty
 from piccolo.apps.user.tables import BaseUser
 from piccolo.engine import engine_finder
 from piccolo_admin.endpoints import create_admin, TableConfig
@@ -29,7 +31,12 @@ from home.controllers import AuthController
 from home.endpoints import (
     home,
 )
-from home.exception_handlers import redirect_for_auth, RedirectForAuth, handle_500
+from home.exception_handlers import (
+    redirect_for_auth,
+    RedirectForAuth,
+    handle_500,
+    handle_404,
+)
 from home.middleware import EnsureAuth
 from home.tables import Users
 from home.util.flash import inject_alerts
@@ -69,10 +76,6 @@ async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
     )(scope, receive, send)
 
 
-async def start_logoo_consumer():
-    await constants.primary_logger.start_consumer()
-
-
 async def open_database_connection_pool():
     try:
         engine = engine_finder()
@@ -98,6 +101,15 @@ async def before_request_handler(request: Request) -> dict[str, str] | None:
     return None
 
 
+logging_config = None
+if constants.IS_PRODUCTION:
+    constants.configure_otel()
+
+else:
+    # Just print logs locally during dev
+    logging_config = Empty
+
+open_telemetry_config = OpenTelemetryConfig()
 cors_config = CORSConfig(
     allow_origins=[],
     allow_headers=[],
@@ -144,6 +156,7 @@ flash_plugin = FlashPlugin(
 session_config = CookieBackendConfig(secret=constants.SESSION_KEY)
 exception_handlers: dict[..., ...] = {
     RedirectForAuth: redirect_for_auth,
+    NotFoundException: handle_404,
 }
 if IS_PRODUCTION:
     exception_handlers[HTTP_500_INTERNAL_SERVER_ERROR] = handle_500
@@ -154,7 +167,7 @@ app = Litestar(
     static_files_config=[
         StaticFilesConfig(directories=["static"], path="/static/"),
     ],
-    on_startup=[open_database_connection_pool, start_logoo_consumer],
+    on_startup=[open_database_connection_pool],
     on_shutdown=[close_database_connection_pool],
     debug=not IS_PRODUCTION,
     openapi_config=OpenAPIConfig(
@@ -175,8 +188,9 @@ app = Litestar(
     ),
     cors_config=cors_config,
     csrf_config=csrf_config,
+    logging_config=logging_config,
     middleware=[rate_limit_config.middleware, session_config.middleware],
-    plugins=[flash_plugin],
+    plugins=[flash_plugin, OpenTelemetryPlugin(open_telemetry_config)],
     response_headers=[
         ResponseHeader(
             name="x-frame-options",

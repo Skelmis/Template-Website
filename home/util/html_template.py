@@ -5,7 +5,15 @@ from home import constants
 from home.util import get_csp
 
 
-def html_template(template_name: str, context: dict) -> Template:
+def html_template(
+    template_name: str,
+    context: dict = None,
+    *,
+    status_code: int = 200,
+) -> Template:
+    if context is None:
+        context = {}
+
     csp, nonce = get_csp()
     context["csp_nonce"] = nonce
     context["site_name"] = constants.SITE_NAME
@@ -14,4 +22,5 @@ def html_template(template_name: str, context: dict) -> Template:
         context=context,
         headers={"content-security-policy": csp},
         media_type=MediaType.HTML,
+        status_code=status_code,
     )

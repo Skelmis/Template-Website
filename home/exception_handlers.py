@@ -1,11 +1,14 @@
+import logging
+
 import commons
-import logoo
 from litestar import MediaType
-from litestar.exceptions import InternalServerException
+from litestar.exceptions import InternalServerException, NotFoundException
 from litestar.response import Redirect, Response
 from starlette.requests import Request
 
-logger = logoo.Logger(__name__)
+from home.util import html_template
+
+logger = logging.getLogger(__name__)
 
 
 class RedirectForAuth(Exception):
@@ -22,13 +25,19 @@ def redirect_for_auth(request: Request, exc: RedirectForAuth) -> Response[Redire
     )
 
 
-def handle_500(_: Request, exc: InternalServerException) -> Response:
+def handle_500(request: Request, exc: InternalServerException) -> Response:
     logger.error(
         "Internal Server Error",
-        extra_metadata={"traceback": commons.exception_as_string(exc)},
+        extra={"traceback": commons.exception_as_string(exc)},
     )
-    return Response(
-        media_type=MediaType.JSON,
-        content={"status_code": 500, "detail": "Internal Server Error"},
-        status_code=500,
-    )
+    if "user" not in request.scope:
+        request.scope["user"] = None  # Needs something
+
+    return html_template("codes/500.jinja", status_code=404)
+
+
+def handle_404(request: Request, exc: NotFoundException) -> Response:
+    if "user" not in request.scope:
+        request.scope["user"] = None  # Needs something
+
+    return html_template("codes/404.jinja", status_code=404)

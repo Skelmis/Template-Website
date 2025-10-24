@@ -28,7 +28,7 @@ async def after_process(ctx):
 
 async def startup(_):
     # Ensure logger is started in SAQ process
-    await constants.primary_logger.start_consumer()
+    constants.configure_otel()
 
 
 SAQ_TIMEOUT = int(datetime.timedelta(hours=1).total_seconds())

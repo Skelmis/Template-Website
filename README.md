@@ -28,6 +28,10 @@ These are environment variables by default. If `(Infisical)` is shown, then they
 ##### Required
 *These must be set for the application to function*
 
+- `INFISICAL_SLUG`: What environment to use from Infisical
+- `INFISICAL_PROJECT_ID`: What project to use from Infisical
+- `INFISICAL_ID`: What client to use for Infisical
+- `INFISICAL_SECRET`: The client secret for Infisical auth
 - `CSRF_TOKEN` (Infisical): The token to use as the CSRF secret.
 - `SESSION_KEY` (Infisical): Must have a length of 16 (128 bits), 24 (192 bits) or 32 (256 bits) characters. Stored as hex.
 - `LOGOO_STREAM` (Infisical): OpenObserve logging stream.
@@ -71,9 +75,22 @@ If you encounter security issues when deploying in environments that meet the ab
 
 _This project is catered to my tech stack. Here are some common gotchas you may encounter_
 
-#### I don't run Logoo / OpenObserve
+#### I don't run OpenObserve
 
-You'll have to download the template, run `uv remove logoo` and then rip all the logging out.
+If you change the following code to suggested then it'll just work.
+```python
+# Original
+logging_config = None
+if constants.IS_PRODUCTION:
+    constants.configure_otel()
+
+else:
+    # Just print logs locally during dev
+    logging_config = Empty
+
+# Modified
+logging_config = Empty
+```
 
 #### I don't use Infisical
 
