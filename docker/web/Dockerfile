@@ -1,7 +1,7 @@
-FROM ghcr.io/astral-sh/uv:alpine
+FROM ghcr.io/astral-sh/uv:python3.13-alpine
 
 RUN apk update
-RUN apk add bash
+RUN apk add bash gcc
 
 WORKDIR /code
 

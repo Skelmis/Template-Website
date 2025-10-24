@@ -41,6 +41,7 @@ These are environment variables by default. If `(Infisical)` is shown, then they
 - `POSTGRES_PORT`: The port for Postgres.
 - `REDIS_URL`: The URL to use when attempting to connect to Redis.
 - `SERVING_DOMAIN`: The domain this site will run on. Used for cookies etc.
+- `MAILGUN_API_KEY`: What to use as the API key for mailgun
 
 ##### Optional
 *These are optional feature flags to provide*
@@ -51,6 +52,7 @@ These are environment variables by default. If `(Infisical)` is shown, then they
 - `DISABLE_HIBP`: If set to a truthy value, bypass the Have I Been Pwned checks on passwords. Defaults to `false`.
 - `MAKE_FIRST_USER_ADMIN`: If truthy, makes the first user created admin. Just simplifies things. Defaults to `true`
 - `REQUIRE_MFA`: If truthy, enforce the usage of Multi-Factor Authentication (MFA) within auth flows. N.b due to platform limitations it won't be enforced if users only ever sign in via the admin portal. Defaults to `false`
+- `DONT_SEND_EMAILS`: If truthy, doesnt send emails. Useful for dev envs, defaults to `false`
 
 #### Deployment Hardening
 
@@ -87,7 +89,7 @@ Good commands for development usage:
 - `docker compose -f ./docker-compose-dev.yml up template_saq template_redis template_db`
 - `docker compose -f ./docker-compose-dev.yml up --build template_saq template_redis template_db`
 
-And then run `uv main.py`
+And then run `uv run main.py`
 
 In order to do DB migrations run the following. DB must be up to do so.
 - `make_migrations.sh`
