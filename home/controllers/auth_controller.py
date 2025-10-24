@@ -269,19 +269,9 @@ class AuthController(Controller):
         if not user:
             body = await request.form()
             name = body.get("name", None)
-            phone = body.get("phone", None)
-            newsletter_signup_consented = body.get("newsletter", "") == "on"
             failed = False
             if name is None or not name:
                 alert(request, "Sorry but we need your name to proceed", level="error")
-                failed = True
-
-            if phone is None or not phone:
-                alert(
-                    request,
-                    "Sorry but we need your phone number to proceed",
-                    level="error",
-                )
                 failed = True
 
             if failed:
@@ -294,12 +284,10 @@ class AuthController(Controller):
             user = Users(
                 username=magic_link.email,
                 name=name,
-                signed_up_for_newsletter=newsletter_signup_consented,
                 email=magic_link.email,
                 password=secrets.token_hex(64),
                 active=True,
                 auths_via_magic_link=True,
-                phone_number=phone,
             )
 
         user.last_login = datetime.now()

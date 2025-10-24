@@ -28,11 +28,7 @@ class Users(Table, tablename="users"):
     password = Secret(length=255)
     name = Varchar(null=True)
     email = Varchar(length=255, unique=True)
-    phone_number = Varchar(null=True, length=50)
     active = Boolean(default=False, help_text="Can this user sign in?")
-    signed_up_for_newsletter = Boolean(
-        default=False, help_text="Did this user consent to being on the mailing list"
-    )
     staff = Boolean(default=False, help_text="Staff can be assigned to sessions")
     admin = Boolean(
         default=False, help_text="An admin can log into the Piccolo admin GUI."
