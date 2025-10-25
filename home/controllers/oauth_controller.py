@@ -117,6 +117,14 @@ class OAuthController(Controller):
                 )
                 return None, Redirect(request.url_for("link_oauth_accounts"))
 
+            if not constants.ALLOW_REGISTRATION:
+                alert(
+                    request,
+                    "Sorry, we are not currently accepting new users",
+                    level="error",
+                )
+                return None, Redirect("/")
+
             user = Users(
                 username=email,
                 name=name,
@@ -183,7 +191,7 @@ class OAuthController(Controller):
             if oauth_entry is None:
                 alert(
                     request,
-                    "Something went wrong linking {provider_id} to you. Please retry.",
+                    f"Something went wrong linking {provider_id} to you. Please retry.",
                     level="error",
                 )
                 continue
