@@ -10,9 +10,9 @@ Features:
   - OAuth (Requires customisation in `oauth_controller.py`)
 - Test setup
 - [Tabler](https://tabler.io/admin-template) based CSS
-- CSP on templates
+- Content Security Policy and Cross-Site Scripting mitigations by default
 - Secrets management via [Infisical](https://infisical.com/)
-- Logging via [OpenObserve](https://openobserve.ai/)
+- Logging via [OpenObserve](https://openobserve.ai/) using Open Telemetry for both logs and traces
 
 ### Usage
 

@@ -3,12 +3,10 @@ from enum import Enum
 from home.util.table_mixins import utc_now
 from piccolo.columns.base import OnDelete
 from piccolo.columns.base import OnUpdate
-from piccolo.columns.column_types import Boolean
+from piccolo.columns.column_types import Boolean, Serial
 from piccolo.columns.column_types import ForeignKey
 from piccolo.columns.column_types import Secret
-from piccolo.columns.column_types import Serial
 from piccolo.columns.column_types import Text
-from piccolo.columns.column_types import Timestamp
 from piccolo.columns.column_types import Timestamptz
 from piccolo.columns.column_types import UUID
 from piccolo.columns.column_types import Varchar
@@ -18,7 +16,7 @@ from piccolo.columns.indexes import IndexMethod
 from piccolo.table import Table
 
 
-class BaseUser(Table, tablename="piccolo_user", schema=None):
+class Users(Table, tablename="users", schema=None):
     id = Serial(
         null=False,
         primary_key=True,
@@ -31,7 +29,7 @@ class BaseUser(Table, tablename="piccolo_user", schema=None):
     )
 
 
-ID = "2025-10-25T12:38:22:313094"
+ID = "2025-10-25T17:42:39:127824"
 VERSION = "1.30.0"
 DESCRIPTION = ""
 
@@ -42,6 +40,10 @@ async def forwards():
     )
 
     manager.add_table(
+        class_name="Users", tablename="users", schema=None, columns=None
+    )
+
+    manager.add_table(
         class_name="MagicLinks",
         tablename="magic_links",
         schema=None,
@@ -49,11 +51,249 @@ async def forwards():
     )
 
     manager.add_table(
-        class_name="Users", tablename="users", schema=None, columns=None
+        class_name="OAuthEntry",
+        tablename="oauth_entry",
+        schema=None,
+        columns=None,
     )
 
     manager.add_table(
         class_name="Alerts", tablename="alerts", schema=None, columns=None
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="username",
+        db_column_name="username",
+        column_class_name="Varchar",
+        column_class=Varchar,
+        params={
+            "length": 100,
+            "default": "",
+            "null": False,
+            "primary_key": False,
+            "unique": True,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="password",
+        db_column_name="password",
+        column_class_name="Secret",
+        column_class=Secret,
+        params={
+            "length": 255,
+            "default": "",
+            "null": False,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": True,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="name",
+        db_column_name="name",
+        column_class_name="Varchar",
+        column_class=Varchar,
+        params={
+            "length": 255,
+            "default": "",
+            "null": True,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="email",
+        db_column_name="email",
+        column_class_name="Varchar",
+        column_class=Varchar,
+        params={
+            "length": 255,
+            "default": "",
+            "null": False,
+            "primary_key": False,
+            "unique": True,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="active",
+        db_column_name="active",
+        column_class_name="Boolean",
+        column_class=Boolean,
+        params={
+            "default": False,
+            "null": False,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="staff",
+        db_column_name="staff",
+        column_class_name="Boolean",
+        column_class=Boolean,
+        params={
+            "default": False,
+            "null": False,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="admin",
+        db_column_name="admin",
+        column_class_name="Boolean",
+        column_class=Boolean,
+        params={
+            "default": False,
+            "null": False,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="superuser",
+        db_column_name="superuser",
+        column_class_name="Boolean",
+        column_class=Boolean,
+        params={
+            "default": False,
+            "null": False,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="last_login",
+        db_column_name="last_login",
+        column_class_name="Timestamptz",
+        column_class=Timestamptz,
+        params={
+            "default": None,
+            "null": True,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="auths_without_password",
+        db_column_name="auths_without_password",
+        column_class_name="Boolean",
+        column_class=Boolean,
+        params={
+            "default": False,
+            "null": False,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="Users",
+        tablename="users",
+        column_name="email_is_verified",
+        db_column_name="email_is_verified",
+        column_class_name="Boolean",
+        column_class=Boolean,
+        params={
+            "default": False,
+            "null": False,
+            "primary_key": False,
+            "unique": False,
+            "index": False,
+            "index_method": IndexMethod.btree,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
     )
 
     manager.add_column(
@@ -183,18 +423,38 @@ async def forwards():
     )
 
     manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="username",
-        db_column_name="username",
-        column_class_name="Varchar",
-        column_class=Varchar,
+        table_class_name="OAuthEntry",
+        tablename="oauth_entry",
+        column_name="oauth_id",
+        db_column_name="oauth_id",
+        column_class_name="Text",
+        column_class=Text,
         params={
-            "length": 100,
             "default": "",
             "null": False,
             "primary_key": False,
-            "unique": True,
+            "unique": False,
+            "index": True,
+            "index_method": IndexMethod.hash,
+            "choices": None,
+            "db_column_name": None,
+            "secret": False,
+        },
+        schema=None,
+    )
+
+    manager.add_column(
+        table_class_name="OAuthEntry",
+        tablename="oauth_entry",
+        column_name="oauth_email",
+        db_column_name="oauth_email",
+        column_class_name="Text",
+        column_class=Text,
+        params={
+            "default": "",
+            "null": False,
+            "primary_key": False,
+            "unique": False,
             "index": False,
             "index_method": IndexMethod.btree,
             "choices": None,
@@ -205,14 +465,13 @@ async def forwards():
     )
 
     manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="password",
-        db_column_name="password",
-        column_class_name="Secret",
-        column_class=Secret,
+        table_class_name="OAuthEntry",
+        tablename="oauth_entry",
+        column_name="provider",
+        db_column_name="provider",
+        column_class_name="Text",
+        column_class=Text,
         params={
-            "length": 255,
             "default": "",
             "null": False,
             "primary_key": False,
@@ -221,21 +480,23 @@ async def forwards():
             "index_method": IndexMethod.btree,
             "choices": None,
             "db_column_name": None,
-            "secret": True,
+            "secret": False,
         },
         schema=None,
     )
 
     manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="name",
-        db_column_name="name",
-        column_class_name="Varchar",
-        column_class=Varchar,
+        table_class_name="OAuthEntry",
+        tablename="oauth_entry",
+        column_name="user",
+        db_column_name="user",
+        column_class_name="ForeignKey",
+        column_class=ForeignKey,
         params={
-            "length": 255,
-            "default": "",
+            "references": Users,
+            "on_delete": OnDelete.cascade,
+            "on_update": OnUpdate.cascade,
+            "target_column": None,
             "null": True,
             "primary_key": False,
             "unique": False,
@@ -249,206 +510,15 @@ async def forwards():
     )
 
     manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="email",
-        db_column_name="email",
-        column_class_name="Varchar",
-        column_class=Varchar,
-        params={
-            "length": 255,
-            "default": "",
-            "null": False,
-            "primary_key": False,
-            "unique": True,
-            "index": False,
-            "index_method": IndexMethod.btree,
-            "choices": None,
-            "db_column_name": None,
-            "secret": False,
-        },
-        schema=None,
-    )
-
-    manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="phone_number",
-        db_column_name="phone_number",
-        column_class_name="Varchar",
-        column_class=Varchar,
-        params={
-            "length": 50,
-            "default": "",
-            "null": True,
-            "primary_key": False,
-            "unique": False,
-            "index": False,
-            "index_method": IndexMethod.btree,
-            "choices": None,
-            "db_column_name": None,
-            "secret": False,
-        },
-        schema=None,
-    )
-
-    manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="active",
-        db_column_name="active",
-        column_class_name="Boolean",
-        column_class=Boolean,
-        params={
-            "default": False,
-            "null": False,
-            "primary_key": False,
-            "unique": False,
-            "index": False,
-            "index_method": IndexMethod.btree,
-            "choices": None,
-            "db_column_name": None,
-            "secret": False,
-        },
-        schema=None,
-    )
-
-    manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="signed_up_for_newsletter",
-        db_column_name="signed_up_for_newsletter",
-        column_class_name="Boolean",
-        column_class=Boolean,
-        params={
-            "default": False,
-            "null": False,
-            "primary_key": False,
-            "unique": False,
-            "index": False,
-            "index_method": IndexMethod.btree,
-            "choices": None,
-            "db_column_name": None,
-            "secret": False,
-        },
-        schema=None,
-    )
-
-    manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="staff",
-        db_column_name="staff",
-        column_class_name="Boolean",
-        column_class=Boolean,
-        params={
-            "default": False,
-            "null": False,
-            "primary_key": False,
-            "unique": False,
-            "index": False,
-            "index_method": IndexMethod.btree,
-            "choices": None,
-            "db_column_name": None,
-            "secret": False,
-        },
-        schema=None,
-    )
-
-    manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="admin",
-        db_column_name="admin",
-        column_class_name="Boolean",
-        column_class=Boolean,
-        params={
-            "default": False,
-            "null": False,
-            "primary_key": False,
-            "unique": False,
-            "index": False,
-            "index_method": IndexMethod.btree,
-            "choices": None,
-            "db_column_name": None,
-            "secret": False,
-        },
-        schema=None,
-    )
-
-    manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="superuser",
-        db_column_name="superuser",
-        column_class_name="Boolean",
-        column_class=Boolean,
-        params={
-            "default": False,
-            "null": False,
-            "primary_key": False,
-            "unique": False,
-            "index": False,
-            "index_method": IndexMethod.btree,
-            "choices": None,
-            "db_column_name": None,
-            "secret": False,
-        },
-        schema=None,
-    )
-
-    manager.add_column(
-        table_class_name="Users",
-        tablename="users",
+        table_class_name="OAuthEntry",
+        tablename="oauth_entry",
         column_name="last_login",
         db_column_name="last_login",
-        column_class_name="Timestamp",
-        column_class=Timestamp,
+        column_class_name="Timestamptz",
+        column_class=Timestamptz,
         params={
             "default": None,
             "null": True,
-            "primary_key": False,
-            "unique": False,
-            "index": False,
-            "index_method": IndexMethod.btree,
-            "choices": None,
-            "db_column_name": None,
-            "secret": False,
-        },
-        schema=None,
-    )
-
-    manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="auths_via_magic_link",
-        db_column_name="auths_via_magic_link",
-        column_class_name="Boolean",
-        column_class=Boolean,
-        params={
-            "default": False,
-            "null": False,
-            "primary_key": False,
-            "unique": False,
-            "index": False,
-            "index_method": IndexMethod.btree,
-            "choices": None,
-            "db_column_name": None,
-            "secret": False,
-        },
-        schema=None,
-    )
-
-    manager.add_column(
-        table_class_name="Users",
-        tablename="users",
-        column_name="email_is_verified",
-        db_column_name="email_is_verified",
-        column_class_name="Boolean",
-        column_class=Boolean,
-        params={
-            "default": False,
-            "null": False,
             "primary_key": False,
             "unique": False,
             "index": False,
@@ -531,11 +601,11 @@ async def forwards():
         column_class_name="ForeignKey",
         column_class=ForeignKey,
         params={
-            "references": BaseUser,
+            "references": Users,
             "on_delete": OnDelete.cascade,
             "on_update": OnUpdate.cascade,
             "target_column": None,
-            "null": True,
+            "null": False,
             "primary_key": False,
             "unique": False,
             "index": True,
