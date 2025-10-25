@@ -38,7 +38,7 @@ from home.exception_handlers import (
     handle_404,
 )
 from home.middleware import EnsureAuth
-from home.tables import Users, OAuthEntry, MagicLinks
+from home.tables import Users, OAuthEntry, MagicLinks, Alerts
 from home.util.flash import inject_alerts
 
 load_dotenv()
@@ -72,6 +72,7 @@ def patch_validate_password_changes(row_id: int, values: dict):
 
 @asgi("/admin/", is_mount=True, copy_scope=True)
 async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
+    alert_tc = TableConfig(Alerts, menu_group="Alerting")
     user_tc = TableConfig(
         Users,
         menu_group="User Management",
@@ -83,7 +84,17 @@ async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
         ],
     )
     oauth_entry_tc = TableConfig(OAuthEntry, menu_group="User Management")
-    magic_link_tc = TableConfig(MagicLinks, menu_group="User Management")
+    magic_links_tc = TableConfig(
+        MagicLinks,
+        menu_group="User Management",
+        order_by=[
+            OrderBy(MagicLinks.id, ascending=False),
+        ],
+        exclude_visible_columns=[
+            MagicLinks.token,
+            MagicLinks.cookie,
+        ],
+    )
     mfa_tc = TableConfig(
         AuthenticatorSecret,
         menu_group="User Management",
@@ -98,7 +109,7 @@ async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
     )
 
     await create_admin(
-        tables=[user_tc, mfa_tc, oauth_entry_tc, magic_link_tc],
+        tables=[user_tc, mfa_tc, oauth_entry_tc, magic_links_tc, alert_tc],
         production=IS_PRODUCTION,
         allowed_hosts=constants.SERVING_DOMAIN,
         sidebar_links={"Site root": "/", "API documentation": "/docs/"},
