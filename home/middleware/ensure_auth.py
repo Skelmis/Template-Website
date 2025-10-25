@@ -7,16 +7,16 @@ from litestar.middleware import (
     AbstractAuthenticationMiddleware,
     AuthenticationResult,
 )
-from piccolo.apps.user.tables import BaseUser
 from piccolo_api.session_auth.tables import SessionsBase
 
 from home.exception_handlers import RedirectForAuth
+from home.tables import Users
 from home.util import alert
 
 
 class EnsureAuth(AbstractAuthenticationMiddleware):
     session_table = SessionsBase
-    auth_table = BaseUser
+    auth_table = Users
     cookie_name = "id"
     admin_only = False
     superuser_only = False
@@ -31,7 +31,7 @@ class EnsureAuth(AbstractAuthenticationMiddleware):
         possible_redirect: str = "/",
         *,
         fail_on_not_set: bool = True,
-    ) -> BaseUser | None:
+    ) -> Users | None:
         token = connection.cookies.get(cls.cookie_name, None)
         if not token:
             if fail_on_not_set:

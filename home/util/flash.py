@@ -1,9 +1,13 @@
-from typing import Literal
+from __future__ import annotations
+
+from typing import Literal, TYPE_CHECKING
 
 from litestar import Request
 from litestar.connection import ASGIConnection
 from litestar.plugins.flash import flash
-from piccolo.apps.user.tables import BaseUser
+
+if TYPE_CHECKING:
+    from home.tables import Users
 
 
 def alert(
@@ -15,7 +19,7 @@ def alert(
     flash(request, message, category=level)
 
 
-async def inject_alerts(request: Request | ASGIConnection, user: BaseUser):
+async def inject_alerts(request: Request | ASGIConnection, user: Users):
     """Ensure lazy alerts make it through to the user"""
     from home.tables import Alerts
 

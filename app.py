@@ -19,15 +19,15 @@ from litestar.static_files import StaticFilesConfig
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from litestar.template import TemplateConfig
 from litestar.types import Receive, Scope, Send, Empty
-from piccolo.apps.user.tables import BaseUser
 from piccolo.engine import engine_finder
 from piccolo_admin.endpoints import create_admin, TableConfig
 from piccolo_api.crud.endpoints import OrderBy
+from piccolo_api.crud.hooks import HookType, Hook
 from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 
 from home import constants
 from home.constants import IS_PRODUCTION
-from home.controllers import AuthController
+from home.controllers import AuthController, OAuthController
 from home.endpoints import (
     home,
 )
@@ -38,16 +38,52 @@ from home.exception_handlers import (
     handle_404,
 )
 from home.middleware import EnsureAuth
-from home.tables import Users
+from home.tables import Users, OAuthEntry, MagicLinks
 from home.util.flash import inject_alerts
 
 load_dotenv()
 
 
-# mounting Piccolo Admin
+def post_validate_password_changes(row: Users):
+    """Given we dont subclass BaseUser we need to patch this in"""
+    try:
+        row.split_stored_password(row.password)
+    except ValueError:
+        row._validate_password(row.password)
+        row.password = row.hash_password(row.password)
+
+    return row
+
+
+def patch_validate_password_changes(row_id: int, values: dict):
+    """Given we dont subclass BaseUser we need to patch this in"""
+    password: str | None = values.pop("password", None)
+    if not password:
+        return values
+
+    try:
+        Users.split_stored_password(password)
+    except ValueError:
+        Users._validate_password(password)
+        values["password"] = Users.hash_password(password)
+
+    return values
+
+
 @asgi("/admin/", is_mount=True, copy_scope=True)
 async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
-    user_tc = TableConfig(Users, menu_group="User Management")
+    user_tc = TableConfig(
+        Users,
+        menu_group="User Management",
+        hooks=[
+            Hook(hook_type=HookType.pre_save, callable=post_validate_password_changes),
+            Hook(
+                hook_type=HookType.pre_patch, callable=patch_validate_password_changes
+            ),
+        ],
+    )
+    oauth_entry_tc = TableConfig(OAuthEntry, menu_group="User Management")
+    magic_link_tc = TableConfig(MagicLinks, menu_group="User Management")
     mfa_tc = TableConfig(
         AuthenticatorSecret,
         menu_group="User Management",
@@ -62,10 +98,7 @@ async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
     )
 
     await create_admin(
-        tables=[
-            user_tc,
-            mfa_tc,
-        ],
+        tables=[user_tc, mfa_tc, oauth_entry_tc, magic_link_tc],
         production=IS_PRODUCTION,
         allowed_hosts=constants.SERVING_DOMAIN,
         sidebar_links={"Site root": "/", "API documentation": "/docs/"},
@@ -161,8 +194,12 @@ exception_handlers: dict[..., ...] = {
 if IS_PRODUCTION:
     exception_handlers[HTTP_500_INTERNAL_SERVER_ERROR] = handle_500
 
+routes = [admin, home, AuthController]
+if constants.HAS_IMPLEMENTED_OAUTH:
+    routes.append(OAuthController)  # type: ignore
+
 app = Litestar(
-    route_handlers=[admin, home, AuthController],
+    route_handlers=routes,
     template_config=template_config,
     static_files_config=[
         StaticFilesConfig(directories=["static"], path="/static/"),

@@ -11,11 +11,12 @@ import secrets
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from piccolo.columns import Boolean, Secret, Timestamp, Varchar
-from piccolo.columns.column_types import Serial
+from piccolo.columns.column_types import Serial, Timestamptz
 from piccolo.columns.readable import Readable
 from piccolo.table import Table
 
 from home.constants import IS_PRODUCTION
+from home.util.table_mixins import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +41,13 @@ class Users(Table, tablename="users"):
             "Piccolo admin GUI."
         ),
     )
-    last_login = Timestamp(
+    last_login = Timestamptz(
         null=True,
         default=None,
         required=False,
         help_text="When this user last logged in.",
     )
-    auths_via_magic_link = Boolean(
+    auths_without_password = Boolean(
         default=False,
         help_text=(
             "If True, this user only authenticates via magic link and shouldn't be shown password and mfa change"
@@ -224,7 +225,7 @@ class Users(Table, tablename="users"):
             if iterations != cls._pbkdf2_iteration_count:
                 await cls.update_password(username, password)
 
-            await cls.update({cls.last_login: datetime.datetime.now()}).where(
+            await cls.update({cls.last_login: utc_now()}).where(
                 cls.username == username
             )
             return response["id"]

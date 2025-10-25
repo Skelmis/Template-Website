@@ -22,15 +22,23 @@ from home.util.table_mixins import utc_now
 
 class AuthController(Controller):
     path = "/auth"
-    _auth_table = Users
-    _mfa_table = AuthenticatorSecret
-    _session_table = SessionsBase
-    _session_expiry = timedelta(hours=6)
-    _max_session_expiry = timedelta(days=3)
-    _redirect_to = "/"
-    _cookie_name = "id"
+    auth_table = Users
+    mfa_table = AuthenticatorSecret
+    session_table = SessionsBase
+    session_expiry = timedelta(hours=6)
+    max_session_expiry = timedelta(days=3)
+    default_redirect_to = "/"
+    cookie_name = "id"
     tags = ["Authentication"]
     include_in_schema = False
+
+    @classmethod
+    def validate_next_route(cls, next_route: str) -> str:
+        # Basic open redirect checks
+        if not next_route.startswith("/"):
+            next_route = "/"
+
+        return next_route
 
     @staticmethod
     def _render_template(
@@ -68,7 +76,7 @@ class AuthController(Controller):
             alert(request, "Missing username or password", level="error")
             return None, cls._render_template(request, "auth/sign_in.jinja")
 
-        user_id = await cls._auth_table.login(
+        user_id = await cls.auth_table.login(
             username=username,
             password=password,
         )
@@ -89,7 +97,7 @@ class AuthController(Controller):
             return None, cls._render_template(request, "auth/sign_in.jinja")
 
         return (
-            await cls._auth_table.objects().get(cls._auth_table.id == user_id),
+            await cls.auth_table.objects().get(cls.auth_table.id == user_id),
             None,
         )
 
@@ -123,10 +131,10 @@ class AuthController(Controller):
             warnings.warn(message)
 
         now = datetime.now()
-        expiry_date = now + cls._session_expiry
-        max_expiry_date = now + cls._max_session_expiry
+        expiry_date = now + cls.session_expiry
+        max_expiry_date = now + cls.max_session_expiry
 
-        session: SessionsBase = await cls._session_table.create_session(
+        session: SessionsBase = await cls.session_table.create_session(
             user_id=user.id,  # type: ignore
             expiry_date=expiry_date,
             max_expiry_date=max_expiry_date,
@@ -160,6 +168,21 @@ class AuthController(Controller):
                 return False
 
         return None
+
+    @get("/sign_in/select_provider", name="select_auth_provider")
+    async def get_select_auth_provider(
+        self, request: Request, next_route: str = "/"
+    ) -> Template:
+        return self._render_template(
+            request,
+            "auth/select_provider.jinja",
+            {
+                "next_route": next_route,
+                "has_oauth": constants.HAS_IMPLEMENTED_OAUTH,
+                "has_registration": constants.ALLOW_REGISTRATION,
+                "has_magic_link": constants.HAS_IMPLEMENTED_MAGIC_LINK,
+            },
+        )
 
     @get("/sign_in/magic_link", name="sign_in_email")
     async def magic_link_get(
@@ -224,7 +247,7 @@ class AuthController(Controller):
             value=magic_link.cookie,
             httponly=True,
             secure=constants.IS_PRODUCTION,
-            max_age=int(self._max_session_expiry.total_seconds()),
+            max_age=int(self.max_session_expiry.total_seconds()),
             samesite="lax",
         )
         return response
@@ -287,10 +310,10 @@ class AuthController(Controller):
                 email=magic_link.email,
                 password=secrets.token_hex(64),
                 active=True,
-                auths_via_magic_link=True,
+                auths_without_password=True,
             )
 
-        user.last_login = datetime.now()
+        user.last_login = utc_now()
         await user.save()
 
         magic_link.used_at = utc_now()
@@ -298,18 +321,16 @@ class AuthController(Controller):
 
         alert(request, "Thanks for signing in", level="success")
 
-        # Basic open redirect checks
-        if not next_route.startswith("/"):
-            next_route = "/"
+        next_route = self.validate_next_route(next_route)
 
         response: Redirect = Redirect(next_route)
         cookie = await self.create_session_for_user(user)
         response.set_cookie(
-            key=self._cookie_name,
+            key=self.cookie_name,
             value=cookie,
             httponly=True,
             secure=constants.IS_PRODUCTION,
-            max_age=int(self._max_session_expiry.total_seconds()),
+            max_age=int(self.max_session_expiry.total_seconds()),
             samesite="lax",
         )
         response.delete_cookie("magic_link_token")
@@ -351,18 +372,16 @@ class AuthController(Controller):
                 level="error",
             )
 
-        # Basic open redirect checks
-        if not next_route.startswith("/"):
-            next_route = "/"
+        next_route = self.validate_next_route(next_route)
 
         response: Redirect = Redirect(next_route)
         cookie = await self.create_session_for_user(user)
         response.set_cookie(
-            key=self._cookie_name,
+            key=self.cookie_name,
             value=cookie,
             httponly=True,
             secure=constants.IS_PRODUCTION,
-            max_age=int(self._max_session_expiry.total_seconds()),
+            max_age=int(self.max_session_expiry.total_seconds()),
             samesite="lax",
         )
         return response
@@ -407,11 +426,11 @@ class AuthController(Controller):
         response = html_template("auth/mfa_confirm.jinja", registration_json)
         cookie = await self.create_session_for_user(user)
         response.set_cookie(
-            key=self._cookie_name,
+            key=self.cookie_name,
             value=cookie,
             httponly=True,
             secure=constants.IS_PRODUCTION,
-            max_age=int(self._max_session_expiry.total_seconds()),
+            max_age=int(self.max_session_expiry.total_seconds()),
             samesite="lax",
         )
         return response
@@ -450,20 +469,22 @@ class AuthController(Controller):
         )
         await self.logout_current_user(request)
         response = Redirect(request.url_for("manage_totp_mfa"))
-        response.set_cookie(self._cookie_name, "", max_age=0)
+        response.set_cookie(self.cookie_name, "", max_age=0)
         return response
 
     @classmethod
     async def logout_current_user(cls, request: Request) -> Redirect:
-        cookie = request.cookies.get(cls._cookie_name, None)
+        cookie = request.cookies.get(cls.cookie_name, None)
         if not cookie:
             # Meh this is fine, just redirect it to home
             return Redirect("/")
 
-        await cls._session_table.remove_session(token=cookie)
+        await cls.session_table.remove_session(token=cookie)
 
-        response: Redirect = Redirect(cls._redirect_to, status_code=HTTP_303_SEE_OTHER)
-        response.set_cookie(cls._cookie_name, "", max_age=0)
+        response: Redirect = Redirect(
+            cls.default_redirect_to, status_code=HTTP_303_SEE_OTHER
+        )
+        response.set_cookie(cls.cookie_name, "", max_age=0)
         return response
 
     @get("/sign_out", name="sign_out")

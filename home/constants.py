@@ -114,6 +114,14 @@ DONT_SEND_EMAILS: bool = value_to_bool(os.environ.get("DONT_SEND_EMAILS", False)
 MAGIC_LINK_VALIDITY_WINDOW = timedelta(minutes=5)
 """How long since it is sent can a link be used to authenticate"""
 
+HAS_IMPLEMENTED_OAUTH = value_to_bool(os.environ.get("HAS_IMPLEMENTED_OAUTH", False))
+"""Set to True if `oauth_controller.py` has been setup and configured to work."""
+
+HAS_IMPLEMENTED_MAGIC_LINK = value_to_bool(
+    os.environ.get("HAS_IMPLEMENTED_MAGIC_LINK", False)
+)
+"""Set to True if emails are configured to work."""
+
 
 SESSION_KEY = bytes.fromhex(get_secret("SESSION_KEY", infisical_client))
 CSRF_TOKEN = get_secret("CSRF_TOKEN", infisical_client)

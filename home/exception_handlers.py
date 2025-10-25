@@ -21,7 +21,8 @@ class RedirectForAuth(Exception):
 def redirect_for_auth(request: Request, exc: RedirectForAuth) -> Response[Redirect]:
     """Where auth is required, redirect for it"""
     return Redirect(
-        str(request.url_for("sign_in")).rstrip("?") + f"?next_route={exc.next_route}"
+        str(request.url_for("select_auth_provider")).rstrip("?")
+        + f"?next_route={exc.next_route}"
     )
 
 

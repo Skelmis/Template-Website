@@ -5,6 +5,9 @@ A website template based on [Piccolo](https://github.com/piccolo-orm/piccolo) wi
 
 Features:
 - Authentication
+  - Username / Password / TOTP
+  - Email Magic Links
+  - OAuth (Requires customisation in `oauth_controller.py`)
 - Test setup
 - [Tabler](https://tabler.io/admin-template) based CSS
 - CSP on templates

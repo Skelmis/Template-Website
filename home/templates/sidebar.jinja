@@ -72,14 +72,15 @@
 
                 {{ start_dropdown('Auth', '<svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-brand-tabler"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 9l3 3l-3 3" /><path d="M13 15h3" /><path d="M3 7a4 4 0 0 1 4 -4h10a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-10a4 4 0 0 1 -4 -4z" /></svg>') }}
                 {% if request.scope.get('user') %}
-                    {{ dropdown_item("Change password", url_for("change_password")) }}
-                    {{ dropdown_item("Manage MFA", url_for("manage_totp_mfa")) }}
                     {{ dropdown_item('Sign out', url_for('sign_out')) }}
+                    {{ dropdown_item("Manage MFA", url_for("manage_totp_mfa")) }}
+                    {{ dropdown_item("Change password", url_for("change_password")) }}
+                    {{ dropdown_item("Manage OAuth Providers", url_for("link_oauth_accounts")) }}
                     {% if request.user.admin %}
                         {{ dropdown_item('Admin Dashboard', '/admin/') }}
                     {% endif %}
                 {% else %}
-                    {{ dropdown_item('Sign in', url_for('sign_in')) }}
+                    {{ dropdown_item('Sign in', url_for('select_auth_provider')) }}
                 {% endif %}
                 {{ end_dropdown() }}
                 {{ start_dropdown('Extra', '<svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24"stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round"stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"></path><path  d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"></path><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path><path d="M15 15l3.35 3.35"></path><path d="M9 15l-3.35 3.35"></path><path d="M5.65 5.65l3.35 3.35"></path><path  d="M18.35 5.65l-3.35 3.35"></path></svg>') }}
