@@ -9,6 +9,8 @@ Features:
   - Email Magic Links
   - OAuth (Requires customisation in `oauth_controller.py`)
 - Test setup
+- Customer User Table
+  - Different roles with existing RBAC middleware
 - [Tabler](https://tabler.io/admin-template) based CSS
 - Content Security Policy and Cross-Site Scripting mitigations by default
 - Secrets management via [Infisical](https://infisical.com/)
