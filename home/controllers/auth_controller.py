@@ -14,7 +14,7 @@ from piccolo_api.session_auth.tables import SessionsBase
 
 from home import constants
 from home.middleware import EnsureAuth
-from home.tables import MagicLinks, Users
+from home.tables import MagicLinks, Users, AuthenticationAttempts
 from home.util import alert, html_template
 from home.util.email import send_email
 from home.util.table_mixins import utc_now
@@ -31,6 +31,8 @@ class AuthController(Controller):
     cookie_name = "id"
     tags = ["Authentication"]
     include_in_schema = False
+    account_lockout_period = timedelta(minutes=10)
+    account_lockout_limit = 5
 
     @classmethod
     def validate_next_route(cls, next_route: str) -> str:
@@ -42,7 +44,7 @@ class AuthController(Controller):
 
     @staticmethod
     def _render_template(
-        request: Request, template: str, context: dict = None
+        request: Request, template: str, context: dict = None, *, status_code: int = 200
     ) -> Template:
         csrftoken = request.scope.get("csrftoken")  # type: ignore
         csrf_cookie_name = request.scope.get("csrf_cookie_name")  # type: ignore
@@ -59,6 +61,7 @@ class AuthController(Controller):
                 "has_registration": constants.ALLOW_REGISTRATION,
                 **context,
             },
+            status_code=status_code,
         )
 
     @classmethod
@@ -74,7 +77,9 @@ class AuthController(Controller):
         """
         if (not username) or (not password):
             alert(request, "Missing username or password", level="error")
-            return None, cls._render_template(request, "auth/sign_in.jinja")
+            return None, cls._render_template(
+                request, "auth/sign_in.jinja", status_code=400
+            )
 
         user_id = await cls.auth_table.login(
             username=username,
@@ -87,14 +92,18 @@ class AuthController(Controller):
                 "The username, password or mfa is incorrect.",
                 level="error",
             )
-            return None, cls._render_template(request, "auth/sign_in.jinja")
+            return None, cls._render_template(
+                request, "auth/sign_in.jinja", status_code=401
+            )
 
         user_is_active = await Users.exists().where(
             (Users.id == user_id) & (Users.active.eq(True))
         )
         if not user_is_active:
             alert(request, "User is currently disabled.", level="error")
-            return None, cls._render_template(request, "auth/sign_in.jinja")
+            return None, cls._render_template(
+                request, "auth/sign_in.jinja", status_code=403
+            )
 
         return (
             await cls.auth_table.objects().get(cls.auth_table.id == user_id),
@@ -224,6 +233,22 @@ class AuthController(Controller):
             )
             return Redirect(request.url_for("sign_in_email"))
 
+        await AuthenticationAttempts.create_via_email(email, "magic_link")
+        if await AuthenticationAttempts.has_exceeded_limits(
+            email, self.account_lockout_limit, self.account_lockout_period
+        ):
+            alert(
+                request,
+                "Your authentication attempt is being rate limited. Please try again later.",
+                level="error",
+            )
+            return self._render_template(
+                request,
+                "auth/sign_in_email.jinja",
+                {"next_route": next_route},
+                status_code=429,
+            )
+
         magic_link = MagicLinks(
             email=email,
             token=MagicLinks.generate_token(),
@@ -302,6 +327,7 @@ class AuthController(Controller):
                     request,
                     "auth/sign_in_email_callback.jinja",
                     {"email": magic_link.email, "requires_info": True},
+                    status_code=400,
                 )
 
             user = Users(
@@ -347,6 +373,17 @@ class AuthController(Controller):
         next_route: str = "/",
     ) -> Template | Redirect:
         username, password, mfa = await self.details_from_body(request)
+        await AuthenticationAttempts.create_via_username(username, "credentials")
+        if await AuthenticationAttempts.has_exceeded_limits(
+            username, self.account_lockout_limit, self.account_lockout_period
+        ):
+            alert(
+                request,
+                "Your authentication attempt is being rate limited. Please try again later.",
+                level="error",
+            )
+            return self._render_template(request, "auth/sign_in.jinja", status_code=429)
+
         user, response = await self.get_user_for_creds(request, username, password)
         if response is not None:
             return response
@@ -358,7 +395,7 @@ class AuthController(Controller):
                 "The username, password or mfa is incorrect.",
                 level="error",
             )
-            return self._render_template(request, "auth/sign_in.jinja")
+            return self._render_template(request, "auth/sign_in.jinja", status_code=401)
 
         elif response is not None:
             return response
@@ -526,7 +563,9 @@ class AuthController(Controller):
         name = body.get("name")
         if not name:
             alert(request, "Setting a name is required", level="error")
-            return self._render_template(request, "auth/change_details.jinja")
+            return self._render_template(
+                request, "auth/change_details.jinja", status_code=400
+            )
 
         phone = body.get("phone")
         signed_up_for_newsletter = body.get("newsletter") == "on"
@@ -637,15 +676,15 @@ class AuthController(Controller):
         if (not username) or (not password) or (not confirm_password) or (not email):
             error_message = "Please ensure all fields on the form are filled out."
             alert(request, error_message, level="error")
-            return self._render_template(request, "auth/sign_up.jinja")
+            return self._render_template(request, "auth/sign_up.jinja", status_code=400)
 
         if not constants.SIMPLE_EMAIL_REGEX.match(email):
             alert(request, "Please enter a valid email.", level="error")
-            return self._render_template(request, "auth/sign_up.jinja")
+            return self._render_template(request, "auth/sign_up.jinja", status_code=400)
 
         if not hmac.compare_digest(password, confirm_password):
             alert(request, "Passwords do not match.", level="error")
-            return self._render_template(request, "auth/sign_up.jinja")
+            return self._render_template(request, "auth/sign_up.jinja", status_code=400)
 
         if constants.CHECK_PASSWORD_AGAINST_HIBP and await has_password_been_pwned(
             password
@@ -656,7 +695,7 @@ class AuthController(Controller):
                 "please pick a unique password.",
                 level="error",
             )
-            return self._render_template(request, "auth/sign_up.jinja")
+            return self._render_template(request, "auth/sign_up.jinja", status_code=422)
 
         # noinspection PyTypeChecker
         if await Users.exists().where(
@@ -667,7 +706,7 @@ class AuthController(Controller):
                 "This user already exists, consider signing in instead.",
                 level="error",
             )
-            return self._render_template(request, "auth/sign_up.jinja")
+            return self._render_template(request, "auth/sign_up.jinja", status_code=422)
 
         try:
             user: Users = await Users.create_user(
@@ -675,7 +714,7 @@ class AuthController(Controller):
             )
         except ValueError as err:
             alert(request, str(err), level="error")
-            return self._render_template(request, "auth/sign_up.jinja")
+            return self._render_template(request, "auth/sign_up.jinja", status_code=500)
 
         alert(
             request,

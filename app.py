@@ -38,7 +38,7 @@ from home.exception_handlers import (
     handle_404,
 )
 from home.middleware import EnsureAuth
-from home.tables import Users, OAuthEntry, MagicLinks, Alerts
+from home.tables import Users, OAuthEntry, MagicLinks, Alerts, AuthenticationAttempts
 from home.util.flash import inject_alerts
 
 load_dotenv()
@@ -84,6 +84,7 @@ async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
         ],
     )
     oauth_entry_tc = TableConfig(OAuthEntry, menu_group="User Management")
+    auth_attempt_tc = TableConfig(AuthenticationAttempts, menu_group="Auditing")
     magic_links_tc = TableConfig(
         MagicLinks,
         menu_group="User Management",
@@ -109,7 +110,14 @@ async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
     )
 
     await create_admin(
-        tables=[user_tc, mfa_tc, oauth_entry_tc, magic_links_tc, alert_tc],
+        tables=[
+            user_tc,
+            mfa_tc,
+            oauth_entry_tc,
+            magic_links_tc,
+            alert_tc,
+            auth_attempt_tc,
+        ],
         production=IS_PRODUCTION,
         allowed_hosts=constants.SERVING_DOMAIN,
         sidebar_links={"Site root": "/", "API documentation": "/docs/"},
