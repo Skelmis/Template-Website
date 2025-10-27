@@ -136,7 +136,7 @@ class APIAlertController[AlertOutModel](CRUDController):
     async def create_object(
         self, request: Request, data: NewAlertModel
     ) -> AlertOutModel:
-        return super().create_object(request, data)
+        return await super().create_object(request, data)
 
     @patch(
         "/{primary_key:str}",
