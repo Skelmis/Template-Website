@@ -10,6 +10,8 @@ from piccolo.columns import (
     Text,
     Serial,
     LazyTableReference,
+    Boolean,
+    Timestamptz,
 )
 from piccolo.columns.indexes import IndexMethod
 from piccolo.table import Table
@@ -42,6 +44,15 @@ class Alerts(AuditMixin, Table):
     )
     message = Text(help_text="The text to show the target on next request?")
     level = Text(help_text="The level to show it at", choices=AlertLevels)
+    has_been_shown = Boolean(
+        default=False, help_text="Whether the user has seen the alert?"
+    )
+    was_shown_at = Timestamptz(
+        null=True,
+        default=None,
+        required=False,
+        help_text="When this user saw the alert.",
+    )
 
     @classmethod
     async def create_alert(

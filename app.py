@@ -28,6 +28,7 @@ from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 from home import constants
 from home.constants import IS_PRODUCTION
 from home.controllers import AuthController, OAuthController
+from home.controllers.api import APIAlertController
 from home.endpoints import (
     home,
 )
@@ -176,10 +177,8 @@ csrf_config = CSRFConfig(
     cookie_secure=True,
     cookie_httponly=True,
     # Exclude routes Piccolo handles itself
-    # and our api routes
     exclude=[
         "/admin/",
-        "/api",
         "/auth",
     ],
 )
@@ -213,7 +212,12 @@ exception_handlers: dict[..., ...] = {
 if IS_PRODUCTION:
     exception_handlers[HTTP_500_INTERNAL_SERVER_ERROR] = handle_500
 
-routes = [admin, home, AuthController]
+routes = [
+    admin,
+    home,
+    AuthController,
+    APIAlertController,
+]
 if constants.HAS_IMPLEMENTED_OAUTH:
     routes.append(OAuthController)  # type: ignore
 
@@ -238,6 +242,12 @@ app = Litestar(
                     name="id",
                     security_scheme_in="cookie",
                     description="Session based authentication.",
+                ),
+                "adminSession": SecurityScheme(
+                    type="apiKey",
+                    name="id",
+                    security_scheme_in="cookie",
+                    description="An Admin users session.",
                 ),
             }
         ),
