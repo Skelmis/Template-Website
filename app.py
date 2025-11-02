@@ -28,7 +28,7 @@ from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 from home import constants
 from home.constants import IS_PRODUCTION
 from home.controllers import AuthController, OAuthController
-from home.controllers.api import APIAlertController
+from home.controllers.api import APIAlertController, APIAuthTokenController
 from home.endpoints import (
     home,
 )
@@ -217,6 +217,7 @@ routes = [
     home,
     AuthController,
     APIAlertController,
+    APIAuthTokenController,
 ]
 if constants.HAS_IMPLEMENTED_OAUTH:
     routes.append(OAuthController)  # type: ignore
@@ -248,6 +249,12 @@ app = Litestar(
                     name="id",
                     security_scheme_in="cookie",
                     description="An Admin users session.",
+                ),
+                "apiKey": SecurityScheme(
+                    type="apiKey",
+                    name="X-API-KEY",
+                    security_scheme_in="header",
+                    description="A valid API token.",
                 ),
             }
         ),

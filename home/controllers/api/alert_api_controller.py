@@ -56,6 +56,7 @@ crud_meta = CRUDMeta(
 )
 
 
+# TODO Move to token auth
 class APIAlertController[AlertOutModel](CRUDController):
     path = "/api/alerts"
     tags = ["Alerts"]
