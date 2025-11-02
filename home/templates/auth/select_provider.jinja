@@ -9,33 +9,44 @@
                     <h2 class="h2 text-center mb-4">Select your authentication mechanism</h2>
                     <div>
                         <div>
-                            Want to sign in with a password? <a
-                                href="{{ url_for('sign_in') }}?next_route={{ next_route }}" tabindex="-1">
-                            Click Here
-                        </a>
+                            <p><b>Password Authentication</b><br>
+                                Want to sign in with a password? <a
+                                        href="{{ url_for('sign_in') }}?next_route={{ next_route }}" tabindex="-1">
+                                    Click Here
+                                </a>
+                            </p>
                         </div>
                         {% if has_magic_link %}
-                            <br><div>
-                                Want to sign in via email link? <a
-                                    href="{{ url_for('sign_in_email') }}?next_route={{ next_route }}" tabindex="-1">
-                                Click Here
-                            </a>
+                            <br>
+                            <div>
+                                <p><b>Email Authentication</b><br>
+                                    Want to sign in via email link? <a
+                                            href="{{ url_for('sign_in_email') }}?next_route={{ next_route }}"
+                                            tabindex="-1">
+                                        Click Here
+                                    </a>
+                                </p>
                             </div>
                         {% endif %}
                         {% if has_oauth %}
-                            <br><div>
-                                Want to sign in OAuth? (GitHub, Discord, etc) <a
-                                    href="{{ url_for('select_oauth_provider') }}?next_route={{ next_route }}"
-                                    tabindex="-1">
-                                Click Here
-                            </a>
+                            <br>
+                            <div>
+                                <p><b>OAuth</b><br>
+                                    Want to sign in OAuth? (GitHub, Discord, etc) <a
+                                            href="{{ url_for('select_oauth_provider') }}?next_route={{ next_route }}"
+                                            tabindex="-1">
+                                        Click Here
+                                    </a>
+                                </p>
                             </div>
                         {% endif %}
                         {% if has_registration %}
-                            <br><div>
-                                <p>Want to create an account with a password? <a
-                                        href="{{ url_for('sign_up') }}?next_route={{ next_route }}"
-                                        tabindex="-1">Sign up here</a>
+                            <br>
+                            <div>
+                                <p><b>Register Account using Password</b><br>
+                                    Want to create an account with a password? <a
+                                            href="{{ url_for('sign_up') }}?next_route={{ next_route }}"
+                                            tabindex="-1">Sign up here</a>
                                 </p>
                             </div>
                         {% endif %}
@@ -43,7 +54,7 @@
                     </div>
                 </div>
             </div>
-        <div class="text-center text-secondary mt-3">
+            <div class="text-center text-secondary mt-3">
                 <p>
                     <a href="/">Go back</a>
                 </p>
