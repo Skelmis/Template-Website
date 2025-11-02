@@ -29,7 +29,6 @@ class Users(AuditMixin, Table, tablename="users"):
     name = Varchar(null=True)
     email = Varchar(length=255, unique=True)
     active = Boolean(default=False, help_text="Can this user sign in?")
-    staff = Boolean(default=False, help_text="Staff can be assigned to sessions")
     admin = Boolean(
         default=False, help_text="An admin can log into the Piccolo admin GUI."
     )
