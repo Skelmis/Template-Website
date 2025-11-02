@@ -4,24 +4,23 @@ A User model, used for authentication.
 
 from __future__ import annotations
 
-import datetime
 import hashlib
 import logging
 import secrets
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from piccolo.columns import Boolean, Secret, Timestamp, Varchar
+from piccolo.columns import Boolean, Secret, Varchar
 from piccolo.columns.column_types import Serial, Timestamptz
 from piccolo.columns.readable import Readable
 from piccolo.table import Table
 
 from home.constants import IS_PRODUCTION
-from home.util.table_mixins import utc_now
+from home.util.table_mixins import utc_now, AuditMixin
 
 logger = logging.getLogger(__name__)
 
 
-class Users(Table, tablename="users"):
+class Users(AuditMixin, Table, tablename="users"):
     if TYPE_CHECKING:
         id: Serial
 

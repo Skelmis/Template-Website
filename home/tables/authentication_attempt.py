@@ -14,11 +14,11 @@ from piccolo.columns import (
 )
 from piccolo.table import Table
 
-from home.util.table_mixins import utc_now
+from home.util.table_mixins import utc_now, AuditMixin
 from home.tables import Users
 
 
-class AuthenticationAttempts(Table):
+class AuthenticationAttempts(AuditMixin,Table):
     if TYPE_CHECKING:
         id: Serial
 

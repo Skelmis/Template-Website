@@ -13,9 +13,10 @@ from piccolo.columns.indexes import IndexMethod
 from piccolo.table import Table
 
 from home import constants
+from home.util import AuditMixin
 
 
-class OAuthEntry(Table, tablename="oauth_entry"):
+class OAuthEntry(AuditMixin, Table, tablename="oauth_entry"):
     if TYPE_CHECKING:
         id: Serial
 

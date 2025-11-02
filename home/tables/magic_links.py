@@ -8,10 +8,10 @@ from piccolo.columns.readable import Readable
 from piccolo.table import Table
 
 from home import constants
-from home.util.table_mixins import utc_now
+from home.util.table_mixins import utc_now, AuditMixin
 
 
-class MagicLinks(Table):
+class MagicLinks(AuditMixin,Table):
     if TYPE_CHECKING:
         id: Serial
 
