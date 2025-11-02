@@ -255,11 +255,14 @@ class AuthController(Controller):
             cookie=MagicLinks.generate_token(),
         )
         await magic_link.save()
+        back_url = (
+            request.url_for("sign_in_email_callback")
+            + f"?next_route={next_route}&token={magic_link.token}"
+        )
         await send_email(
             email,
             "Sign In Link",
-            html=f"Click the following link to sign in: http://127.0.0.1:8000"
-            f"/auth/sign_in/callback?next_route={next_route}&token={magic_link.token}",
+            html=f"Click the following link to sign in: {back_url}",
         )
         alert(
             request,
