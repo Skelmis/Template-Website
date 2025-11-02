@@ -306,47 +306,52 @@ class AuthController(Controller):
     async def magic_link_token_post(
         self, request: Request, token: str, next_route: str = "/"
     ) -> Redirect | Template:
-        magic_link: MagicLinks = await MagicLinks.objects().get(
-            (MagicLinks.token == token) & (MagicLinks.used_at.is_null())
-        )
-        if not magic_link or (magic_link and magic_link.is_still_valid is False):
-            alert(request, "Sorry that's an invalid token", level="error")
-            return Redirect(request.url_for("sign_in_email"))
+        async with MagicLinks._meta.db.transaction():
+            magic_link: MagicLinks = (
+                await MagicLinks.objects()
+                .lock_rows("NO KEY UPDATE", nowait=True)
+                .get((MagicLinks.token == token) & (MagicLinks.used_at.is_null()))
+            )
+            if not magic_link or (magic_link and magic_link.is_still_valid is False):
+                alert(request, "Sorry that's an invalid token", level="error")
+                return Redirect(request.url_for("sign_in_email"))
 
-        if request.cookies.get("magic_link_token") == magic_link.cookie:
-            magic_link.used_in_same_request_browser = True
+            if request.cookies.get("magic_link_token") == magic_link.cookie:
+                magic_link.used_in_same_request_browser = True
 
-        user = await Users.objects().get(Users.username == magic_link.email)  # type: ignore
-        if not user:
-            body = await request.form()
-            name = body.get("name", None)
-            failed = False
-            if name is None or not name:
-                alert(request, "Sorry but we need your name to proceed", level="error")
-                failed = True
+            user = await Users.objects().get(Users.username == magic_link.email)  # type: ignore
+            if not user:
+                body = await request.form()
+                name = body.get("name", None)
+                failed = False
+                if name is None or not name:
+                    alert(
+                        request, "Sorry but we need your name to proceed", level="error"
+                    )
+                    failed = True
 
-            if failed:
-                return self._render_template(
-                    request,
-                    "auth/sign_in_email_callback.jinja",
-                    {"email": magic_link.email, "requires_info": True},
-                    status_code=400,
+                if failed:
+                    return self._render_template(
+                        request,
+                        "auth/sign_in_email_callback.jinja",
+                        {"email": magic_link.email, "requires_info": True},
+                        status_code=400,
+                    )
+
+                user = Users(
+                    username=magic_link.email,
+                    name=name,
+                    email=magic_link.email,
+                    password=secrets.token_hex(64),
+                    active=True,
+                    auths_without_password=True,
                 )
 
-            user = Users(
-                username=magic_link.email,
-                name=name,
-                email=magic_link.email,
-                password=secrets.token_hex(64),
-                active=True,
-                auths_without_password=True,
-            )
+            user.last_login = utc_now()
+            await user.save()
 
-        user.last_login = utc_now()
-        await user.save()
-
-        magic_link.used_at = utc_now()
-        await magic_link.save()
+            magic_link.used_at = utc_now()
+            await magic_link.save()
 
         alert(request, "Thanks for signing in", level="success")
 
