@@ -4,7 +4,7 @@ import arrow
 from freezegun import freeze_time
 from piccolo_api.session_auth.tables import SessionsBase
 
-from home.util.table_mixins import utc_now
+from template.util.table_mixins import utc_now
 
 
 async def test_session_base():

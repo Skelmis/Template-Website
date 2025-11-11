@@ -10,9 +10,9 @@ from piccolo.apps.tester.commands.run import refresh_db, set_env_var
 from piccolo.conf.apps import Finder
 from piccolo.table import create_db_tables, drop_db_tables
 
-from home.controllers import AuthController
-from home.saq.worker import SAQ_QUEUE
-from home.tables import Users
+from template.controllers import AuthController
+from template.saq.worker import SAQ_QUEUE
+from template.tables import Users
 
 if TYPE_CHECKING:
     from litestar import Litestar

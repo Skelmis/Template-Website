@@ -25,22 +25,28 @@ from piccolo_api.crud.endpoints import OrderBy
 from piccolo_api.crud.hooks import HookType, Hook
 from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 
-from home import constants
-from home.constants import IS_PRODUCTION
-from home.controllers import AuthController, OAuthController
-from home.controllers.api import APIAlertController, APIAuthTokenController
-from home.endpoints import (
+from template import constants
+from template.constants import IS_PRODUCTION
+from template.controllers import AuthController, OAuthController
+from template.controllers.api import APIAlertController, APIAuthTokenController
+from template.endpoints import (
     home,
 )
-from home.exception_handlers import (
+from template.exception_handlers import (
     redirect_for_auth,
     RedirectForAuth,
     handle_500,
     handle_404,
 )
-from home.middleware import EnsureAuth
-from home.tables import Users, OAuthEntry, MagicLinks, Alerts, AuthenticationAttempts
-from home.util.flash import inject_alerts
+from template.middleware import EnsureAuth
+from template.tables import (
+    Users,
+    OAuthEntry,
+    MagicLinks,
+    Alerts,
+    AuthenticationAttempts,
+)
+from template.util.flash import inject_alerts
 
 load_dotenv()
 
