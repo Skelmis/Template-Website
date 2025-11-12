@@ -4,10 +4,10 @@ from uuid import UUID
 
 from pydantic import Field, BaseModel
 
-from home.controllers import AuthController
-from home.crud import CRUDClient
-from home.tables import AlertLevels, Users
-from home.util.table_mixins import utc_now
+from template.controllers import AuthController
+from template.crud import CRUDClient
+from template.tables import AlertLevels, Users
+from template.util.table_mixins import utc_now
 
 
 class NewAlertModel(BaseModel):
