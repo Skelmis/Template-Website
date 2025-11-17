@@ -24,6 +24,7 @@ from piccolo_admin.endpoints import create_admin, TableConfig
 from piccolo_api.crud.endpoints import OrderBy
 from piccolo_api.crud.hooks import HookType, Hook
 from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from template import constants
 from template.constants import IS_PRODUCTION
@@ -270,7 +271,11 @@ app = Litestar(
     cors_config=cors_config,
     csrf_config=csrf_config,
     logging_config=logging_config,
-    middleware=[rate_limit_config.middleware, session_config.middleware],
+    middleware=[
+        rate_limit_config.middleware,
+        session_config.middleware,
+        ProxyHeadersMiddleware,
+    ],
     plugins=[flash_plugin, OpenTelemetryPlugin(open_telemetry_config)],
     response_headers=[
         ResponseHeader(
