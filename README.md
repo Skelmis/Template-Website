@@ -8,6 +8,7 @@ Features:
   - Username / Password / TOTP
   - Email Magic Links
   - OAuth (Requires customisation in `oauth_controller.py`)
+  - API Tokens
 - Test setup
 - Custom User Table
   - Different roles with existing RBAC middleware
