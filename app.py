@@ -199,7 +199,7 @@ rate_limit_config = RateLimitConfig(
 )
 ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(
-        searchpath=os.path.join(os.path.dirname(__file__), "home", "templates")
+        searchpath=os.path.join(os.path.dirname(__file__), "template", "templates")
     ),
     autoescape=True,
 )

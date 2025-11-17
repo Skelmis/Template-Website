@@ -80,7 +80,7 @@ class APIToken(AuditMixin, Table, tablename="api_token"):
         return (
             await cls.exists()
             .where(cls.token == token)
-            .where(cls.expiry_date < utc_now())
+            .where(utc_now() < cls.expiry_date)
             .run()
         )
 
@@ -121,7 +121,7 @@ class APIToken(AuditMixin, Table, tablename="api_token"):
             # and we don't want to expand its validity
             return api_token
 
-        if not api_token.token_expires_within_window(increase_window):
+        if not await api_token.token_expires_within_window(increase_window):
             # Token is fine to expand
             api_token.expiry_date = (
                 cast(datetime.datetime, cast(object, api_token.expiry_date))

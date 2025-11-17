@@ -62,7 +62,7 @@ class APIAuthTokenController(Controller):
     )
     async def post_fresh_token(
         self, request: Request, token: str
-    ) -> TokenOutModel | Response[APIRedirectForAuth]:
+    ) -> Response[APIRedirectForAuth | TokenOutModel]:
         api_token: APIToken | None = await APIToken.get_token(  # type: ignore
             token,
             increase_window=self.token_expiry,
@@ -82,10 +82,13 @@ class APIAuthTokenController(Controller):
                 status_code=401,
             )
 
-        return TokenOutModel(
-            token=api_token.token,
-            expiry_date=api_token.expiry_date,
-            max_expiry_date=api_token.max_expiry_date,
+        return Response(
+            TokenOutModel(
+                token=api_token.token,
+                expiry_date=api_token.expiry_date,
+                max_expiry_date=api_token.max_expiry_date,
+            ),
+            status_code=200,
         )
 
     @delete(
