@@ -8,7 +8,7 @@ load_dotenv()
 
 DB = PostgresEngine(
     config={
-        "database": "test",
+        "database": "tests",
         "user": os.environ["POSTGRES_USER"],
         "password": os.environ["POSTGRES_PASSWORD"],
         "host": os.environ["POSTGRES_HOST"],
@@ -18,7 +18,7 @@ DB = PostgresEngine(
 
 APP_REGISTRY = AppRegistry(
     apps=[
-        "home.piccolo_app",
+        "template.piccolo_app",
         "piccolo_admin.piccolo_app",
         "piccolo_api.mfa.authenticator.piccolo_app",
     ]

@@ -25,22 +25,28 @@ from piccolo_api.crud.endpoints import OrderBy
 from piccolo_api.crud.hooks import HookType, Hook
 from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 
-from home import constants
-from home.constants import IS_PRODUCTION
-from home.controllers import AuthController, OAuthController
-from home.controllers.api import APIAlertController
-from home.endpoints import (
+from template import constants
+from template.constants import IS_PRODUCTION
+from template.controllers import AuthController, OAuthController
+from template.controllers.api import APIAlertController, APIAuthTokenController
+from template.endpoints import (
     home,
 )
-from home.exception_handlers import (
+from template.exception_handlers import (
     redirect_for_auth,
     RedirectForAuth,
     handle_500,
     handle_404,
 )
-from home.middleware import EnsureAuth
-from home.tables import Users, OAuthEntry, MagicLinks, Alerts, AuthenticationAttempts
-from home.util.flash import inject_alerts
+from template.middleware import EnsureAuth
+from template.tables import (
+    Users,
+    OAuthEntry,
+    MagicLinks,
+    Alerts,
+    AuthenticationAttempts,
+)
+from template.util.flash import inject_alerts
 
 load_dotenv()
 
@@ -180,6 +186,8 @@ csrf_config = CSRFConfig(
     exclude=[
         "/admin/",
         "/auth",
+        # It's manged via Tokens not cookies so is fine
+        "/api",
     ],
 )
 # noinspection PyTypeChecker
@@ -193,7 +201,7 @@ rate_limit_config = RateLimitConfig(
 )
 ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(
-        searchpath=os.path.join(os.path.dirname(__file__), "home", "templates")
+        searchpath=os.path.join(os.path.dirname(__file__), "template", "templates")
     ),
     autoescape=True,
 )
@@ -217,6 +225,7 @@ routes = [
     home,
     AuthController,
     APIAlertController,
+    APIAuthTokenController,
 ]
 if constants.HAS_IMPLEMENTED_OAUTH:
     routes.append(OAuthController)  # type: ignore
@@ -248,6 +257,12 @@ app = Litestar(
                     name="id",
                     security_scheme_in="cookie",
                     description="An Admin users session.",
+                ),
+                "apiKey": SecurityScheme(
+                    type="apiKey",
+                    name="X-API-KEY",
+                    security_scheme_in="header",
+                    description="A valid API token.",
                 ),
             }
         ),
