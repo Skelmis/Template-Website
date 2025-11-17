@@ -85,6 +85,10 @@ class APIToken(AuditMixin, Table, tablename="api_token"):
         )
 
     @classmethod
+    async def get_instance_from_token(cls, token) -> APIToken | None:
+        return await cls.objects(cls.user).where(cls.token == token).first().run()
+
+    @classmethod
     async def get_token(
         cls,
         token: str,
@@ -107,7 +111,7 @@ class APIToken(AuditMixin, Table, tablename="api_token"):
         If the current token would expire during increase,
         a new token and row is returned instead.
         """
-        api_token = await cls.objects(cls.user).where(cls.token == token).first().run()
+        api_token = await cls.get_instance_from_token(token)
 
         if commons.timing.is_in_the_past(
             utc_now(),

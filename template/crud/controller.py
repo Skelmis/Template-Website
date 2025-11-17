@@ -71,6 +71,18 @@ class CRUDMeta:
     """A list of columns to always pre-fetch"""
 
 
+def get_user_ratelimit_key(request: Request[Any, Any, Any]) -> str:
+    """Get a cache-key from an authenticated ``Request``
+
+    Notes
+    -----
+    This falls back to a global key if the request is not authenticated.
+
+    You may wish to change this to fall back to IP instead
+    """
+    return str(request.user.id) if request.user else "global"
+
+
 # noinspection PyMethodMayBeStatic
 class CRUDController(Controller, Generic[ModelOutT]):
     """A CRUD base controller to inherit.

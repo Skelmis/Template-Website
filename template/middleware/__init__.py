@@ -1,3 +1,3 @@
-from .ensure_auth import EnsureAuth
+from .ensure_auth import EnsureAuth, EnsureAdmin, EnsureSuperUser, UserFromAPIKey
 
-__all__ = ("EnsureAuth",)
+__all__ = ("EnsureAuth", "EnsureAdmin", "EnsureSuperUser", "UserFromAPIKey")

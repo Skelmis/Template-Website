@@ -10,7 +10,7 @@ from litestar.middleware import (
 from piccolo_api.session_auth.tables import SessionsBase
 
 from template.exception_handlers import RedirectForAuth
-from template.tables import Users
+from template.tables import Users, APIToken
 from template.util import alert
 
 
@@ -94,3 +94,19 @@ class EnsureAdmin(EnsureAuth):
 
 class EnsureSuperUser(EnsureAdmin):
     superuser_only = True
+
+
+# noinspection PyMethodMayBeStatic
+class UserFromAPIKey(AbstractAuthenticationMiddleware):
+    async def authenticate_request(
+        self, connection: ASGIConnection
+    ) -> AuthenticationResult:
+        raw_token = connection.headers.get("X-API-KEY")
+        if not raw_token:
+            raise NotAuthorizedException("This route requires an API Token")
+
+        if not await APIToken.validate_token_is_valid(raw_token):
+            raise NotAuthorizedException("This token is expired")
+
+        api_token = await APIToken.get_instance_from_token(raw_token)
+        return AuthenticationResult(user=api_token.user, auth=None)

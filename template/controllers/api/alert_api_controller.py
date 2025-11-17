@@ -3,6 +3,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from litestar import patch, Request, post, get, delete
+from litestar.middleware.rate_limit import RateLimitConfig
 from litestar.params import Parameter
 from pydantic import BaseModel, Field
 
@@ -12,8 +13,10 @@ from template.crud.controller import (
     CRUDMeta,
     GetCountResponseModel,
     CRUD_BASE_OPENAPI_RESPONSES,
+    get_user_ratelimit_key,
 )
 from template.guards import ensure_api_token
+from template.middleware import UserFromAPIKey
 from template.tables import Alerts, AlertLevels
 
 
@@ -56,10 +59,17 @@ crud_meta = CRUDMeta(
 )
 
 
+rate_limit_config = RateLimitConfig(
+    rate_limit=("second", 5),  # noqa
+    identifier_for_request=get_user_ratelimit_key,
+)
+
+
 class APIAlertController[AlertOutModel](CRUDController):
     path = "/api/alerts"
     tags = ["Alerts"]
     META = crud_meta
+    middleware = [UserFromAPIKey, rate_limit_config.middleware]
     guards = [ensure_api_token]
     security = [{"adminSession": []}]
 
