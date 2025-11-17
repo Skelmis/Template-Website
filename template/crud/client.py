@@ -1,7 +1,9 @@
 from collections.abc import AsyncGenerator
+from http import HTTPMethod
 from typing import TypeVar, Generic, Any
 
 import httpx
+from httpx_retries import RetryTransport, Retry
 from pydantic import BaseModel, Field
 
 MODEL_IN = TypeVar("MODEL_IN")
@@ -28,9 +30,32 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
         *,
         headers: dict | None = None,
         cookies: dict | None = None,
+        maximum_retries_before_giving_up: int = 5,
+        maximum_retry_wait_between_requests: float = 60,
     ):
         self.client = httpx.AsyncClient(
-            base_url=base_url, headers=headers, cookies=cookies
+            base_url=base_url,
+            headers=headers,
+            cookies=cookies,
+            # Automatically retry 429's as per response headers
+            transport=RetryTransport(
+                retry=Retry(
+                    backoff_factor=0.5,
+                    respect_retry_after_header=True,
+                    total=maximum_retries_before_giving_up,
+                    max_backoff_wait=maximum_retry_wait_between_requests,
+                    allowed_methods=[
+                        HTTPMethod.HEAD,
+                        HTTPMethod.OPTIONS,
+                        HTTPMethod.TRACE,
+                        HTTPMethod.GET,
+                        HTTPMethod.POST,
+                        HTTPMethod.PUT,
+                        HTTPMethod.PATCH,
+                        HTTPMethod.DELETE,
+                    ],
+                )
+            ),
         )
         self.dto_out: type[MODEL_OUT] = dto_out
 

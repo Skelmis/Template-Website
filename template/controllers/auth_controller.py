@@ -505,6 +505,20 @@ class AuthController(Controller):
 
     @post("/mfa/totp/delete", name="mfa_totp_delete", middleware=[EnsureAuth])
     async def totp_mfa_delete(self, request: Request) -> Template | Redirect:
+        form = await request.form()
+        password = form.get("password")
+        algorithm, iterations_, salt, hashed = Users.split_stored_password(
+            request.user.password
+        )
+        iterations = int(iterations_)
+        if not Users.hash_password(password, salt, iterations) == request.user.password:
+            alert(
+                request,
+                "Incorrect password, unable to delete MFA at this time",
+                level="error",
+            )
+            return Redirect(request.url_for("manage_totp_mfa"))
+
         # SOFT delete, but safe to stack for same user
         await constants.MFA_TOTP_PROVIDER.delete_registration(user=request.user)
         alert(
