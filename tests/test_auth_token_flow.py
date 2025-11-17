@@ -44,6 +44,13 @@ async def test_guard(
     csrf_token,
     patch_saq,
 ):
+    resp_1: httpx.Response = await test_client.post(
+        "/auth/token/refresh",
+        data={"_csrf_token": csrf_token},
+        cookies={"csrf_token": csrf_token, "id": session_cookie},
+        follow_redirects=False,
+    )
+    assert resp_1.status_code == 401
     resp_2: httpx.Response = await test_client.post(
         "/auth/token/refresh",
         headers={"X-API-KEY": "test"},
