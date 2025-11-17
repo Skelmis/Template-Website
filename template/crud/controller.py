@@ -80,7 +80,7 @@ def get_user_ratelimit_key(request: Request[Any, Any, Any]) -> str:
 
     You may wish to change this to fall back to IP instead
     """
-    return str(request.user.id) if request.user else "global"
+    return f"user-{request.user.id}" if request.user else "global"
 
 
 # noinspection PyMethodMayBeStatic

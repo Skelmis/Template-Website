@@ -4,7 +4,6 @@ from uuid import UUID
 
 from pydantic import Field, BaseModel
 
-from template.controllers import AuthController
 from template.crud import CRUDClient
 from template.tables import AlertLevels, Users, APIToken
 from template.util.table_mixins import utc_now
@@ -52,6 +51,10 @@ async def main():
         AlertOutModel,
         headers={"X-API-KEY": token.token},
     )
+
+    # The CRUDClient even smoothly handles 429's!
+    for _ in range(8):  # Ratelimit is 5/sec
+        await client.get_all_records_as_list()
 
     # Create an alert, mark it as seen and then delete it
     alert = await client.create_record(
