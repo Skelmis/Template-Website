@@ -79,45 +79,22 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
         return self.dto_out(**resp.json())
 
     async def delete_record(self, object_id: Any) -> None:
-        resp = await self.client.get(f"/meta/csrf")
-        resp.raise_for_status()
-        csrf = resp.cookies["csrf_token"]
-        delete_resp = await self.client.delete(
-            f"/{object_id}",
-            headers={
-                "x-csrftoken": csrf,
-            },
-            cookies={"csrf_token": csrf},
-        )
+        delete_resp = await self.client.delete(f"/{object_id}")
         delete_resp.raise_for_status()
         return None
 
     async def create_record(self, data: MODEL_IN) -> MODEL_OUT:
-        resp = await self.client.get(f"/meta/csrf")
-        resp.raise_for_status()
-        csrf = resp.cookies["csrf_token"]
         create_resp = await self.client.post(
             "/",
             data=data.model_dump_json(),
-            headers={
-                "x-csrftoken": csrf,
-            },
-            cookies={"csrf_token": csrf},
         )
         create_resp.raise_for_status()
         return self.dto_out(**create_resp.json())
 
     async def patch_record(self, object_id: Any, data: MODEL_PATCH_IN) -> MODEL_OUT:
-        resp = await self.client.get(f"/meta/csrf")
-        resp.raise_for_status()
-        csrf = resp.cookies["csrf_token"]
         create_resp = await self.client.patch(
             f"/{object_id}",
             data=data.model_dump_json(exclude_unset=True),
-            headers={
-                "x-csrftoken": csrf,
-            },
-            cookies={"csrf_token": csrf},
         )
         create_resp.raise_for_status()
         return self.dto_out(**create_resp.json())

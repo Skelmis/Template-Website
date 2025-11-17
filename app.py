@@ -186,6 +186,8 @@ csrf_config = CSRFConfig(
     exclude=[
         "/admin/",
         "/auth",
+        # It's manged via Tokens not cookies so is fine
+        "/api",
     ],
 )
 # noinspection PyTypeChecker

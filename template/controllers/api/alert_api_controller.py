@@ -13,7 +13,7 @@ from template.crud.controller import (
     GetCountResponseModel,
     CRUD_BASE_OPENAPI_RESPONSES,
 )
-from template.middleware.ensure_auth import EnsureAdmin
+from template.guards import ensure_api_token
 from template.tables import Alerts, AlertLevels
 
 
@@ -56,12 +56,11 @@ crud_meta = CRUDMeta(
 )
 
 
-# TODO Move to token auth
 class APIAlertController[AlertOutModel](CRUDController):
     path = "/api/alerts"
     tags = ["Alerts"]
     META = crud_meta
-    middleware = [EnsureAdmin]
+    guards = [ensure_api_token]
     security = [{"adminSession": []}]
 
     @get(

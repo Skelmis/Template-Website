@@ -6,7 +6,7 @@ from pydantic import Field, BaseModel
 
 from template.controllers import AuthController
 from template.crud import CRUDClient
-from template.tables import AlertLevels, Users
+from template.tables import AlertLevels, Users, APIToken
 from template.util.table_mixins import utc_now
 
 
@@ -43,12 +43,14 @@ class AlertPatchModel(BaseModel):
 async def main():
     # Fake an auth session
     user = await Users.objects().first()
-    session = await AuthController.create_session_for_user(user)
+    token = await APIToken.create_api_token(
+        user, datetime.timedelta(hours=2), datetime.timedelta(days=1)
+    )
 
     client: CRUDClient[NewAlertModel, AlertOutModel] = CRUDClient(
         "http://localhost:8000/api/alerts",
         AlertOutModel,
-        cookies={"id": session},
+        headers={"X-API-KEY": token.token},
     )
 
     # Create an alert, mark it as seen and then delete it
