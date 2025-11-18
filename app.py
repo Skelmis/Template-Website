@@ -12,7 +12,9 @@ from litestar.exceptions import NotFoundException
 from litestar.middleware.rate_limit import RateLimitConfig
 from litestar.middleware.session.client_side import CookieBackendConfig
 from litestar.openapi import OpenAPIConfig
-from litestar.openapi.plugins import SwaggerRenderPlugin
+from litestar.openapi.plugins import (
+    ScalarRenderPlugin,
+)
 from litestar.openapi.spec import SecurityScheme, Components
 from litestar.plugins.flash import FlashPlugin, FlashConfig
 from litestar.static_files import StaticFilesConfig
@@ -243,7 +245,36 @@ app = Litestar(
     openapi_config=OpenAPIConfig(
         title=constants.SITE_NAME.rstrip() + " API",
         version="0.0.0",
-        render_plugins=[SwaggerRenderPlugin()],
+        render_plugins=[
+            ScalarRenderPlugin(
+                options={
+                    "hideClientButton": True,
+                    "showSidebar": True,
+                    "showToolbar": "never",
+                    "operationTitleSource": "summary",
+                    "theme": "default",
+                    "persistAuth": False,
+                    "telemetry": False,
+                    "layout": "modern",
+                    "isEditable": False,
+                    "isLoading": False,
+                    "hideModels": False,
+                    "documentDownloadType": "both",
+                    "hideTestRequestButton": False,
+                    "hideSearch": False,
+                    "showOperationId": False,
+                    "hideDarkModeToggle": False,
+                    "withDefaultFonts": True,
+                    "defaultOpenAllTags": False,
+                    "expandAllModelSections": False,
+                    "expandAllResponses": False,
+                    "orderSchemaPropertiesBy": "alpha",
+                    "orderRequiredPropertiesFirst": True,
+                    "_integration": "html",
+                    "default": False,
+                }
+            )
+        ],
         path="/docs",
         components=Components(
             security_schemes={
