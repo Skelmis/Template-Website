@@ -14,6 +14,10 @@ from template.crud.controller import (
     GetCountResponseModel,
     CRUD_BASE_OPENAPI_RESPONSES,
     get_user_ratelimit_key,
+    SearchableColumn,
+    SearchTableModel,
+    SearchRequestModel,
+    SearchModel,
 )
 from template.guards import ensure_api_token
 from template.middleware import UserFromAPIKey
@@ -56,6 +60,37 @@ crud_meta = CRUDMeta(
     BASE_CLASS_ORDER_BY=Alerts.id,
     DTO_OUT=AlertOutModel,
     PREFETCH_COLUMNS=[Alerts.target],
+    AVAILABLE_FILTERS=[
+        SearchableColumn(
+            columns=[
+                SearchTableModel(
+                    column=Alerts.target, column_name="target", expected_value_type=int
+                ),
+                SearchTableModel(
+                    column=Alerts.level, column_name="level", expected_value_type=str
+                ),
+                SearchTableModel(
+                    column=Alerts.has_been_shown,
+                    column_name="has_been_shown",
+                    expected_value_type=bool,
+                ),
+            ],
+            supports_equals=True,
+        ),
+        SearchableColumn(
+            columns=[
+                SearchTableModel(
+                    column=Alerts.message,
+                    column_name="message",
+                    expected_value_type=str,
+                ),
+            ],
+            supports_equals=True,
+            supports_contains=True,
+            supports_starts_with=True,
+            supports_ends_with=True,
+        ),
+    ],
 )
 
 
@@ -69,8 +104,8 @@ class APIAlertController[AlertOutModel](CRUDController):
     path = "/api/alerts"
     tags = ["Alerts"]
     META = crud_meta
-    middleware = [UserFromAPIKey, rate_limit_config.middleware]
-    guards = [ensure_api_token]
+    # middleware = [UserFromAPIKey, rate_limit_config.middleware]
+    # guards = [ensure_api_token]
     security = [{"adminSession": []}]
 
     @get(
@@ -170,3 +205,25 @@ class APIAlertController[AlertOutModel](CRUDController):
             data.model_dump(exclude_unset=True),
             # data.model_dump(exclude_unset=True, exclude_none=True),
         )
+
+    @get("/search/filters")
+    async def get_available_search_filters(
+        self, request: Request
+    ) -> SearchRequestModel:
+        return await super().get_available_search_filters(request)
+
+    @post("/search", responses=CRUD_BASE_OPENAPI_RESPONSES, status_code=200)
+    async def run_search(
+        self,
+        request: Request,
+        data: SearchModel,
+        page_size: int = Parameter(
+            query="_page_size",
+            default=500,
+            required=False,
+            le=500,
+            ge=1,
+        ),
+        next_cursor: str | None = Parameter(query="_next_cursor", required=False),
+    ) -> GetAllResponseModel[AlertOutModel]:
+        return await super().search(request, data, page_size, next_cursor)

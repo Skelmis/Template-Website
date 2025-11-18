@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import dataclasses
-from typing import Any, TypeVar, Generic, Annotated, Mapping
+from typing import Any, TypeVar, Generic, Annotated, Mapping, Literal
 
 from litestar import Controller, Request
 from litestar.openapi import ResponseSpec
@@ -11,7 +11,8 @@ from litestar.params import Parameter
 from piccolo.columns import Column, ForeignKey
 from piccolo.query import Objects, Count
 from piccolo.table import Table
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from typeguard import check_type, TypeCheckError
 
 from template.exception_handlers import APIRedirectForAuth
 
@@ -55,6 +56,183 @@ class GetCountResponseModel(BaseModel):
     )
 
 
+class SearchItemInNulls(BaseModel):
+    column_name: str = Field(description="The name of the column")
+    operation: Literal["is_null", "is_not_null"] = Field(
+        description="The operation to filter by"
+    )
+
+
+class SearchItemIn(SearchItemInNulls):
+    column_name: str = Field(description="The name of the column")
+    operation: str = Field(description="The operation to filter by")
+    search_value: Any = Field(description="The value used in the filter operation")
+
+
+class SearchModel(BaseModel):
+    filters: list[SearchItemIn | SearchItemInNulls]
+
+
+class RawSearchOption(BaseModel):
+    column_name: str = Field(description="The name of the column")
+    expected_type: Any = Field(description="Python type input must validate against")
+    supported_filters: list[str] = Field(
+        description="The operations supported for this column"
+    )
+
+
+class SearchTableModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    column: Column
+    column_name: str = Field(description="How users will reference this table")
+    expected_value_type: type[Any] = Field(
+        description="Python type input must validate against"
+    )
+
+
+class SearchableColumn(BaseModel):
+    columns: list[SearchTableModel] = Field(
+        description="Columns to apply this search config to"
+    )
+    # All opposites are derived from these
+    #   i.e. if supports_equals is True then supports_not_equals is also True
+    supports_is_null: bool = Field(
+        default=False, description="is column null or not null"
+    )
+    supports_equals: bool = Field(default=False, description="== check as well as !=")
+    supports_greater_than: bool = Field(default=False, description="> check")
+    supports_greater_than_equal: bool = Field(default=False, description=">= check")
+    supports_less_than: bool = Field(default=False, description="< check")
+    supports_less_than_equal: bool = Field(default=False, description="<= check")
+    supports_starts_with: bool = Field(
+        default=False,
+        description="Does column start with value as well as not start with",
+    )
+    supports_ends_with: bool = Field(
+        default=False, description="Does column end with value as well as not end with"
+    )
+    supports_contains: bool = Field(
+        default=False, description="Does column contain value as well as not contains"
+    )
+
+
+class SearchRequestModel(BaseModel):
+    filters: list[RawSearchOption]
+    # column_configuration: list[SearchableColumn]
+
+
+class SearchAddons:
+    @classmethod
+    def _searchable_column_to_operands(cls, sc: SearchableColumn) -> list[str]:
+        data = []
+        if sc.supports_is_null:
+            data.append("is_null")
+            data.append("is_not_null")
+
+        if sc.supports_equals:
+            data.append("equals")
+            data.append("not_equals")
+
+        if sc.supports_greater_than:
+            data.append("greater_than")
+        if sc.supports_less_than:
+            data.append("less_than")
+        if sc.supports_greater_than_equal:
+            data.append("greater_than_equal")
+        if sc.supports_less_than_equal:
+            data.append("less_than_equal")
+
+        if sc.supports_starts_with:
+            data.append("starts_with")
+            data.append("not_starts_with")
+
+        if sc.supports_ends_with:
+            data.append("ends_with")
+            data.append("not_ends_with")
+
+        if sc.supports_contains:
+            data.append("contains")
+            data.append("not_contains")
+
+        return data
+
+    @classmethod
+    async def get_available_search_filters(
+        cls,
+        available_filters: list[SearchableColumn],
+        *,
+        return_raw_types: bool = False,
+    ) -> SearchRequestModel:
+        out_filters: list[RawSearchOption] = []
+        for sc in available_filters:
+            operations = cls._searchable_column_to_operands(sc)
+            for col in sc.columns:
+                out_filters.append(
+                    RawSearchOption(
+                        column_name=col.column_name,
+                        expected_type=(
+                            col.expected_value_type
+                            if return_raw_types
+                            else col.expected_value_type.__name__
+                        ),
+                        supported_filters=operations,
+                    )
+                )
+
+        return SearchRequestModel(
+            filters=out_filters,
+            # column_configuration=self.META.AVAILABLE_FILTERS,
+        )
+
+    @classmethod
+    async def validate_search_input_filters(
+        cls, search_filters: SearchModel, available_filters: list[SearchableColumn]
+    ):
+        raw_supported_operations = await cls.get_available_search_filters(
+            available_filters, return_raw_types=True
+        )
+        supported_operations: dict[str, tuple[Any, list[str]]] = {}
+        for item in raw_supported_operations.filters:
+            supported_operations[item.column_name] = (
+                item.expected_type,
+                item.supported_filters,
+            )
+
+        issues: list[str] = []
+        for entry in search_filters.filters:
+            if entry.column_name not in supported_operations:
+                issues.append(f"Column {repr(entry.column_name)} not supported")
+                continue
+
+            if entry.operation not in supported_operations[entry.column_name][1]:
+                issues.append(
+                    f"Operation {repr(entry.operation)} not supported on column {repr(entry.column_name)}"
+                )
+                continue
+
+            try:
+                check_type(
+                    entry.search_value, supported_operations[entry.column_name][0]
+                )
+            except TypeCheckError as e:
+                issues.append(
+                    f"Value {repr(entry.search_value)} not a supported type for column {repr(entry.column_name)}. "
+                    f"Expected {repr(supported_operations[entry.column_name][0].__name__)}, got {repr(str(e))}"
+                )
+                continue
+
+        return (
+            None
+            if not issues
+            else {
+                "detail": "Your submission had issues",
+                "status_code": 400,
+                "extra": {"errors": issues},
+            }
+        )
+
+
 @dataclasses.dataclass
 class CRUDMeta:
     BASE_CLASS: type[Table]
@@ -69,6 +247,8 @@ class CRUDMeta:
     """Model for an outgoing row"""
     PREFETCH_COLUMNS: list[ForeignKey] = dataclasses.field(default_factory=list)
     """A list of columns to always pre-fetch"""
+    AVAILABLE_FILTERS: list[SearchableColumn] = dataclasses.field(default_factory=list)
+    """A list of columns that can be filtered by for what operations"""
 
 
 def get_user_ratelimit_key(request: Request[Any, Any, Any]) -> str:
@@ -172,6 +352,54 @@ class CRUDController(Controller, Generic[ModelOutT]):
                 self.META.BASE_CLASS_CURSOR_COL._meta.name,  # type: ignore
             )
 
+        return GetAllResponseModel(
+            data=[self._transform_row_to_output(row) for row in rows],
+            next_cursor=self._encode_cursor(next_cursor),
+        )
+
+    async def get_available_search_filters(
+        self, request: Request
+    ) -> SearchRequestModel:
+        return await SearchAddons.get_available_search_filters(
+            self.META.AVAILABLE_FILTERS
+        )
+
+    async def search(
+        self,
+        request: Request,
+        search_filters: SearchModel,
+        page_size: int = Parameter(
+            query="_page_size",
+            default=500,
+            required=False,
+            le=500,
+            ge=1,
+        ),
+        next_cursor: str | None = Parameter(query="_next_cursor", required=False),
+    ) -> GetAllResponseModel[TableT]:
+        await SearchAddons.validate_search_input_filters(
+            search_filters, available_filters=self.META.AVAILABLE_FILTERS
+        )
+        base_query = (
+            self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
+            .limit(page_size + 1)
+            .order_by(self.META.BASE_CLASS_ORDER_BY)
+        )
+
+        base_query = await self.add_custom_where(request, base_query)
+        next_cursor = self._decode_cursor(next_cursor)
+        if next_cursor is not None:
+            base_query = base_query.where(self.META.BASE_CLASS_PK >= next_cursor)
+
+        rows: list[TableT] = await base_query.run()
+        next_cursor = None
+        if len(rows) > page_size:
+            final_row = rows.pop(-1)
+            # noinspection PyProtectedMember
+            next_cursor = getattr(
+                final_row,
+                self.META.BASE_CLASS_CURSOR_COL._meta.name,  # type: ignore
+            )
         return GetAllResponseModel(
             data=[self._transform_row_to_output(row) for row in rows],
             next_cursor=self._encode_cursor(next_cursor),
