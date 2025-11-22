@@ -5,6 +5,7 @@ import base64
 import dataclasses
 from typing import Any, TypeVar, Generic, Annotated, Mapping, Literal
 
+import commons
 from litestar import Controller, Request
 from litestar.exceptions import ValidationException
 from litestar.openapi import ResponseSpec
@@ -345,6 +346,8 @@ class SearchAddons:
                 search_value = f"%{entry.search_value}"
             elif entry.operation in ("contains", "not_contains"):
                 search_value = f"%{entry.search_value}%"
+            elif wrapper is bool:
+                search_value = commons.value_to_bool(entry.search_value)
             else:
                 search_value = wrapper(entry.search_value)
 
@@ -525,7 +528,6 @@ class CRUDController(Controller, Generic[ModelOutT]):
         if next_cursor is not None:
             base_query = base_query.where(self.META.BASE_CLASS_PK >= next_cursor)
 
-        print(base_query)
         rows: list[TableT] = await base_query.run()
         next_cursor = None
         if len(rows) > page_size:

@@ -102,9 +102,12 @@ async def main():
         f"\n\tP.s. I deleted all alerts mwaha!"
     )
 
-    # --- No alerts exist at this stagee ---
-    await client.create_record(
+    # --- No alerts exist at this stage ---
+    alert_1 = await client.create_record(
         NewAlertModel(target=1, message="Not good!", level=AlertLevels.WARNING)
+    )
+    await client.patch_record(
+        alert_1.uuid, AlertPatchModel(was_shown_at=utc_now(), has_been_shown=True)
     )
     await client.create_record(
         NewAlertModel(target=1, message="Its fine", level=AlertLevels.ERROR)
@@ -172,6 +175,19 @@ async def main():
         )
     )
     print(f"Found {len(r_3)} alerts with complex query")
+
+    r_4 = await client.search_records_as_list(
+        SearchModel(
+            filters=[
+                SearchItemIn(
+                    column_name="has_been_shown",
+                    operation="equals",
+                    search_value="1",
+                ),
+            ]
+        )
+    )
+    print(f"Found {len(r_4)} alerts have been shown")
 
     # Cleanup once done
     async for group in client.get_all_records():
