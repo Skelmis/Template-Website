@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,6 +9,8 @@ from litestar.testing import AsyncTestClient
 from piccolo.apps.tester.commands.run import refresh_db, set_env_var
 from piccolo.conf.apps import Finder
 from piccolo.table import create_db_tables, drop_db_tables
+from piccolo.testing import ModelBuilder
+from piccolo.utils.sync import run_sync
 
 from template.controllers import AuthController
 from template.saq.worker import SAQ_QUEUE
@@ -63,19 +65,31 @@ async def test_client() -> AsyncIterator[AsyncTestClient[Litestar]]:
 
 
 @pytest.fixture(scope="function")
-async def session_cookie(request) -> str:
-    user = await Users.objects().get(Users.username == request.param)
-    return await AuthController.create_session_for_user(user)
-
-
-@pytest.fixture(scope="function")
-async def csrf_token(test_client: AsyncTestClient[Litestar]) -> str:
-    resp = await test_client.get("/")
-    return resp.cookies["csrf_token"]
-
-
-@pytest.fixture(scope="function")
 def patch_saq(monkeypatch) -> AsyncMock:
     saq_enqueue = AsyncMock()
     monkeypatch.setattr(SAQ_QUEUE, "enqueue", saq_enqueue)
     return saq_enqueue
+
+
+class BaseGiven:
+    data: dict[str, Any] = {}
+
+    def user(self, username: str) -> Self:
+        if not Users.objects().get(Users.username == username).run_sync():
+            self.data["user"] = run_sync(
+                ModelBuilder.build(Users, {Users.username: username})
+            )
+        else:
+            self.data["user"] = (
+                Users.objects().get(Users.username == username).run_sync()
+            )
+        return self
+
+    @property
+    def session_cookie(self) -> str:
+        assert "user" in self.data, "Given must have called user first"
+        return run_sync(AuthController.create_session_for_user(self.data["user"]))
+
+    def csrf_token(self, test_client: AsyncTestClient[Litestar]) -> str:
+        resp = run_sync(test_client.get("/"))
+        return resp.cookies["csrf_token"]
