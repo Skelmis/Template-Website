@@ -18,11 +18,56 @@ from template.tables import Alerts
 class Given:
     data: dict[str, Any] = {}
 
-    def searchable_columns(self, sc: list[SearchableColumn] | SearchableColumn) -> Self:
-        if not isinstance(sc, list):
-            sc = [sc]
-        self.data["sc"] = sc
-        return self
+    @classmethod
+    def default_searchable_columns(cls) -> Self:
+        af = [
+            SearchableColumn(
+                columns=[
+                    SearchTableModel(
+                        column=Alerts.target,
+                        column_name="target",
+                        expected_value_type=int,
+                    ),
+                    SearchTableModel(
+                        column=Alerts.level,
+                        column_name="level",
+                        expected_value_type=str,
+                    ),
+                    SearchTableModel(
+                        column=Alerts.has_been_shown,
+                        column_name="has_been_shown",
+                        expected_value_type=bool,
+                    ),
+                ],
+                supports_equals=True,
+            ),
+            SearchableColumn(
+                columns=[
+                    SearchTableModel(
+                        column=Alerts.message,
+                        column_name="message",
+                        expected_value_type=str,
+                    ),
+                ],
+                supports_equals=True,
+                supports_contains=True,
+                supports_starts_with=True,
+                supports_ends_with=True,
+            ),
+        ]
+        obj = cls()
+        obj.data["sc"] = af
+        return obj
+
+    @classmethod
+    def searchable_columns(cls, sc: list[SearchableColumn] | SearchableColumn):
+        obj = cls()
+        obj.data["sc"] = sc if isinstance(sc, list) else [sc]
+        return obj
+
+    @property
+    def filters(self) -> list[SearchableColumn]:
+        return self.data["sc"]
 
     @property
     def sc(self) -> Self:
@@ -40,41 +85,6 @@ class Given:
 
 # noinspection PyProtectedMember
 async def test_validate_filters_on_bad_data():
-    af = [
-        SearchableColumn(
-            columns=[
-                SearchTableModel(
-                    column=Alerts.target,
-                    column_name="target",
-                    expected_value_type=int,
-                ),
-                SearchTableModel(
-                    column=Alerts.level,
-                    column_name="level",
-                    expected_value_type=str,
-                ),
-                SearchTableModel(
-                    column=Alerts.has_been_shown,
-                    column_name="has_been_shown",
-                    expected_value_type=bool,
-                ),
-            ],
-            supports_equals=True,
-        ),
-        SearchableColumn(
-            columns=[
-                SearchTableModel(
-                    column=Alerts.message,
-                    column_name="message",
-                    expected_value_type=str,
-                ),
-            ],
-            supports_equals=True,
-            supports_contains=True,
-            supports_starts_with=True,
-            supports_ends_with=True,
-        ),
-    ]
     r_1 = await SearchAddons.validate_search_input_filters(
         SearchModel(
             filters=[
@@ -83,7 +93,7 @@ async def test_validate_filters_on_bad_data():
                 )
             ]
         ),
-        af,
+        Given.default_searchable_columns().filters,
     )
     assert r_1 == {
         "detail": "Your submission had issues",
@@ -99,7 +109,7 @@ async def test_validate_filters_on_bad_data():
                 )
             ]
         ),
-        af,
+        Given.default_searchable_columns().filters,
     )
     assert r_2 == {
         "detail": "Your submission had issues",
@@ -115,7 +125,7 @@ async def test_validate_filters_on_bad_data():
                 )
             ]
         ),
-        af,
+        Given.default_searchable_columns().filters,
     )
     assert r_3 == {
         "detail": "Your submission had issues",
@@ -148,7 +158,7 @@ async def test_validate_filters_on_bad_data():
                 ),
             ]
         ),
-        af,
+        Given.default_searchable_columns().filters,
     )
     assert r_4 == {
         "detail": "Your submission had issues",
@@ -171,7 +181,7 @@ async def test_validate_filters_on_bad_data():
                 ),
             ]
         ),
-        af,
+        Given.default_searchable_columns().filters,
     )
     assert r_5 == {
         "detail": "Your submission had issues",
@@ -257,7 +267,7 @@ async def test_filters_on_correct_data():
 
 
 async def test_build_basic_correct_where():
-    given = Given().searchable_columns(
+    given = Given.searchable_columns(
         SearchableColumn(
             columns=[
                 SearchTableModel(
