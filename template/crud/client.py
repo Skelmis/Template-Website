@@ -127,7 +127,7 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
         return self.dto_out(**create_resp.json())
 
     async def get_search_filters(self) -> SearchRequestModel:
-        resp = await self.client.get(f"/search/filters")
+        resp = await self.client.get(f"/meta/search/filters")
         resp.raise_for_status()
         return SearchRequestModel(**resp.json())
 

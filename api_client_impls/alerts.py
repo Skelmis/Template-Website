@@ -173,6 +173,11 @@ async def main():
     )
     print(f"Found {len(r_3)} alerts with complex query")
 
+    # Cleanup once done
+    async for group in client.get_all_records():
+        for row in group:
+            await client.delete_record(row.uuid)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

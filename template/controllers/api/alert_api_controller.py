@@ -207,7 +207,7 @@ class APIAlertController[AlertOutModel](CRUDController):
             # data.model_dump(exclude_unset=True, exclude_none=True),
         )
 
-    @get("/search/filters")
+    @get("/meta/search/filters")
     async def get_available_search_filters(
         self, request: Request
     ) -> SearchRequestModel:
