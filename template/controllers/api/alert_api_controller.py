@@ -18,6 +18,7 @@ from template.crud.controller import (
     SearchTableModel,
     SearchRequestModel,
     SearchModel,
+    QueryT,
 )
 from template.guards import ensure_api_token
 from template.middleware import UserFromAPIKey

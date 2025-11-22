@@ -1,14 +1,26 @@
 from __future__ import annotations
 
+import ast
 import base64
 import dataclasses
 from typing import Any, TypeVar, Generic, Annotated, Mapping, Literal
 
 from litestar import Controller, Request
+from litestar.exceptions import ValidationException
 from litestar.openapi import ResponseSpec
 from litestar.openapi.spec import Example
 from litestar.params import Parameter
-from piccolo.columns import Column, ForeignKey
+from piccolo.columns import Column, ForeignKey, And, Or, Where
+from piccolo.columns.operators import IsNull, IsNotNull, Equal, NotEqual
+from piccolo.columns.operators.comparison import (
+    ComparisonOperator,
+    GreaterThan,
+    LessThan,
+    GreaterEqualThan,
+    LessEqualThan,
+    ILike,
+    NotLike,
+)
 from piccolo.query import Objects, Count
 from piccolo.table import Table
 from pydantic import BaseModel, Field, ConfigDict
@@ -69,8 +81,16 @@ class SearchItemIn(SearchItemInNulls):
     search_value: Any = Field(description="The value used in the filter operation")
 
 
+class JoinModel(BaseModel):
+    operand: Literal["and", "or"] = Field(
+        description="Can be used for complex filterings. If JoinModel is not used, "
+        "all filters are an implicit AND. Max nesting of 5."
+    )
+    filters: list[SearchItemIn | SearchItemInNulls | JoinModel]
+
+
 class SearchModel(BaseModel):
-    filters: list[SearchItemIn | SearchItemInNulls]
+    filters: list[SearchItemIn | SearchItemInNulls | JoinModel]
 
 
 class RawSearchOption(BaseModel):
@@ -123,6 +143,23 @@ class SearchRequestModel(BaseModel):
 
 
 class SearchAddons:
+    operators: dict[str, ComparisonOperator] = {
+        "is_null": IsNull,
+        "is_not_null": IsNotNull,
+        "equals": Equal,
+        "not_equals": NotEqual,
+        "greater_than": GreaterThan,
+        "less_than": LessThan,
+        "greater_than_equal": GreaterEqualThan,
+        "less_than_equal": LessEqualThan,
+        "starts_with": ILike,
+        "not_starts_with": NotLike,
+        "ends_with": ILike,
+        "not_ends_with": NotLike,
+        "contains": ILike,
+        "not_contains": NotLike,
+    }
+
     @classmethod
     def _searchable_column_to_operands(cls, sc: SearchableColumn) -> list[str]:
         data = []
@@ -187,11 +224,27 @@ class SearchAddons:
 
     @classmethod
     async def validate_search_input_filters(
-        cls, search_filters: SearchModel, available_filters: list[SearchableColumn]
+        cls,
+        search_filters: (
+            list[SearchItemIn | SearchItemInNulls | JoinModel] | SearchModel
+        ),
+        available_filters: list[SearchableColumn],
+        *,
+        issues: list[str] | None = None,
+        raw_supported_operations=None,
+        depth: int = 1,
     ):
-        raw_supported_operations = await cls.get_available_search_filters(
-            available_filters, return_raw_types=True
-        )
+        depth += 1
+        if depth == 5:
+            raise ValidationException(
+                "Your nesting is too big, refusing to honour this filter request."
+            )
+
+        if raw_supported_operations is None:
+            raw_supported_operations = await cls.get_available_search_filters(
+                available_filters, return_raw_types=True
+            )
+
         supported_operations: dict[str, tuple[Any, list[str]]] = {}
         for item in raw_supported_operations.filters:
             supported_operations[item.column_name] = (
@@ -199,8 +252,31 @@ class SearchAddons:
                 item.supported_filters,
             )
 
-        issues: list[str] = []
-        for entry in search_filters.filters:
+        if isinstance(search_filters, SearchModel):
+            search_filters = search_filters.filters
+
+        if issues is None:
+            issues: list[str] = []
+
+        for entry in search_filters:
+            if isinstance(entry, JoinModel):
+                if entry.operand not in ["and", "or"]:
+                    issues.append(
+                        f"Value {repr(entry.operand)} is not a supported join operand."
+                    )
+
+                if len(entry.filters) != 2:
+                    issues.append(f"Join {repr(entry.operand)} requires two parameters")
+
+                await cls.validate_search_input_filters(
+                    entry.filters,
+                    available_filters,
+                    issues=issues,
+                    depth=depth,
+                    raw_supported_operations=raw_supported_operations,
+                )
+                continue
+
             if entry.column_name not in supported_operations:
                 issues.append(f"Column {repr(entry.column_name)} not supported")
                 continue
@@ -231,6 +307,56 @@ class SearchAddons:
                 "extra": {"errors": issues},
             }
         )
+
+    @classmethod
+    async def apply_filters_to_query(
+        cls,
+        query: QueryT,
+        search_filters: SearchModel,
+        available_filters: list[SearchableColumn],
+    ) -> QueryT:
+        lookups: dict[str, tuple[Column, Any]] = {}
+        for sc in available_filters:
+            for col in sc.columns:
+                lookups[col.column_name] = (col.column, col.expected_value_type)
+
+        await cls.validate_search_input_filters(search_filters, available_filters)
+        return query.where(*cls._get_conditions(search_filters.filters, lookups))
+
+    @classmethod
+    def _get_conditions(
+        cls,
+        search_filters: (
+            list[SearchItemIn | SearchItemInNulls | JoinModel] | SearchModel
+        ),
+        lookups: dict[str, tuple[Column, Any]],
+    ) -> list[And | Or | Where]:
+        output: list[And | Or | Where] = []
+        for entry in search_filters:
+            if isinstance(entry, JoinModel):
+                wrapper = Or if entry.operand == "or" else And
+                output.append(wrapper(*cls._get_conditions(entry.filters, lookups)))
+                continue
+
+            wrapper = lookups[entry.column_name][1]
+            if entry.operation in ("starts_with", "not_starts_with"):
+                search_value = f"{entry.search_value}%"
+            elif entry.operation in ("ends_with", "not_ends_with"):
+                search_value = f"%{entry.search_value}"
+            elif entry.operation in ("contains", "not_contains"):
+                search_value = f"%{entry.search_value}%"
+            else:
+                search_value = wrapper(entry.search_value)
+
+            output.append(
+                Where(
+                    lookups[entry.column_name][0],
+                    search_value,
+                    operator=cls.operators[entry.operation],
+                )
+            )
+
+        return output
 
 
 @dataclasses.dataclass
@@ -305,6 +431,15 @@ class CRUDController(Controller, Generic[ModelOutT]):
     def _transform_row_to_output(self, row: Table) -> ModelOutT:
         return self.META.DTO_OUT(**row.to_dict())
 
+    async def _apply_filters_to_query(
+        self,
+        query: QueryT,
+        search_filters: SearchModel,
+    ) -> QueryT:
+        return await SearchAddons.apply_filters_to_query(
+            query, search_filters, available_filters=self.META.AVAILABLE_FILTERS
+        )
+
     async def add_custom_where(self, request: Request, query: QueryT) -> QueryT:
         """Override this method to add custom clauses
         to all queries issue by this controller.
@@ -377,20 +512,20 @@ class CRUDController(Controller, Generic[ModelOutT]):
         ),
         next_cursor: str | None = Parameter(query="_next_cursor", required=False),
     ) -> GetAllResponseModel[TableT]:
-        await SearchAddons.validate_search_input_filters(
-            search_filters, available_filters=self.META.AVAILABLE_FILTERS
-        )
         base_query = (
             self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
             .limit(page_size + 1)
             .order_by(self.META.BASE_CLASS_ORDER_BY)
         )
 
+        await self._apply_filters_to_query(base_query, search_filters)
+
         base_query = await self.add_custom_where(request, base_query)
         next_cursor = self._decode_cursor(next_cursor)
         if next_cursor is not None:
             base_query = base_query.where(self.META.BASE_CLASS_PK >= next_cursor)
 
+        print(base_query)
         rows: list[TableT] = await base_query.run()
         next_cursor = None
         if len(rows) > page_size:

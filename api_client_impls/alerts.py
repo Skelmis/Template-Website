@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import Field, BaseModel
 
 from template.crud import CRUDClient
+from template.crud.controller import SearchModel, SearchItemIn, JoinModel
 from template.tables import AlertLevels, Users, APIToken
 from template.util.table_mixins import utc_now
 
@@ -100,6 +101,77 @@ async def main():
         f"Only {have_been_seen} alerts have been shown though!"
         f"\n\tP.s. I deleted all alerts mwaha!"
     )
+
+    # --- No alerts exist at this stagee ---
+    await client.create_record(
+        NewAlertModel(target=1, message="Not good!", level=AlertLevels.WARNING)
+    )
+    await client.create_record(
+        NewAlertModel(target=1, message="Its fine", level=AlertLevels.ERROR)
+    )
+    await client.create_record(
+        NewAlertModel(target=1, message="Hello World", level=AlertLevels.INFO)
+    )
+    await client.create_record(
+        NewAlertModel(target=2, message="Nice!", level=AlertLevels.SUCCESS)
+    )
+
+    available_filters = await client.get_search_filters()
+    print("Search options", available_filters.filters)
+
+    r_1 = await client.search_records_as_list(
+        SearchModel(
+            filters=[
+                SearchItemIn(
+                    column_name="target",
+                    operation="equals",
+                    search_value="1",
+                ),
+            ]
+        )
+    )
+    print(f"Found {len(r_1)} alerts where the target had the id 1!")
+    r_2 = await client.search_records_as_list(
+        SearchModel(
+            filters=[
+                SearchItemIn(
+                    column_name="message",
+                    operation="starts_with",
+                    search_value="Hello",
+                ),
+                SearchItemIn(
+                    column_name="target",
+                    operation="equals",
+                    search_value="1",
+                ),
+            ]
+        )
+    )
+    print(
+        f"Found {len(r_2)} alerts where the message starts with 'Hello' and is targeting user 1"
+    )
+    r_3 = await client.search_records_as_list(
+        SearchModel(
+            filters=[
+                JoinModel(
+                    operand="or",
+                    filters=[
+                        SearchItemIn(
+                            column_name="level",
+                            operation="equals",
+                            search_value="success",
+                        ),
+                        SearchItemIn(
+                            column_name="target",
+                            operation="equals",
+                            search_value="1",
+                        ),
+                    ],
+                ),
+            ]
+        )
+    )
+    print(f"Found {len(r_3)} alerts with complex query")
 
 
 if __name__ == "__main__":
