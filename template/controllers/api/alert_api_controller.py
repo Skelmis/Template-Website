@@ -107,7 +107,7 @@ class APIAlertController[AlertOutModel](CRUDController):
     META = crud_meta
     # middleware = [UserFromAPIKey, rate_limit_config.middleware]
     # guards = [ensure_api_token]
-    security = [{"adminSession": []}]
+    # security = [{"apiKey": []}]
 
     @get(
         "/",
@@ -169,10 +169,6 @@ class APIAlertController[AlertOutModel](CRUDController):
     )
     async def get_record_count(self, request: Request) -> GetCountResponseModel:
         return await super().get_record_count(request)
-
-    @get("/meta/csrf", include_in_schema=False)
-    async def get_csrf_token(self, request: Request) -> None:
-        return None
 
     @post(
         "/",

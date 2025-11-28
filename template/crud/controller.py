@@ -588,11 +588,6 @@ class CRUDController(Controller, Generic[ModelOutT]):
         await base_query.run()
         return None
 
-    async def get_csrf_token(self, request: Request) -> None:
-        # Purely exists so API clients can get a CSRF token
-        # without running a DB query at the same time
-        return None
-
     async def create_object(self, request: Request, data: ModelInT) -> ModelOutT:
         object_cls = self.META.BASE_CLASS(**data.model_dump())
         await object_cls.save()
