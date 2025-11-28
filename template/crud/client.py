@@ -6,6 +6,8 @@ import httpx
 from httpx_retries import RetryTransport, Retry
 from pydantic import BaseModel, Field
 
+from template.crud.controller import SearchRequestModel, SearchModel
+
 MODEL_IN = TypeVar("MODEL_IN")
 MODEL_OUT = TypeVar("MODEL_OUT")
 MODEL_PATCH_IN = TypeVar("MODEL_PATCH_IN")
@@ -123,3 +125,44 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
         )
         create_resp.raise_for_status()
         return self.dto_out(**create_resp.json())
+
+    async def get_search_filters(self) -> SearchRequestModel:
+        resp = await self.client.get(f"/meta/search/filters")
+        resp.raise_for_status()
+        return SearchRequestModel(**resp.json())
+
+    async def search_records_as_list(
+        self, search: SearchModel, page_size: int = 500
+    ) -> list[MODEL_OUT]:
+        data = []
+        async for entry in self.search_records(search=search, page_size=page_size):
+            data.extend(entry)
+        return data
+
+    async def search_records(self, search: SearchModel, page_size: int = 500):
+        initial_response: httpx.Response = await self.client.post(
+            f"/search?_page_size={page_size}",
+            data=search.model_dump_json(),
+        )
+        initial_response.raise_for_status()
+        raw_data = initial_response.json()
+        resp_data: GetAllResponseModel = GetAllResponseModel(
+            next_cursor=raw_data["next_cursor"],
+            data=[self.dto_out(**row) for row in raw_data["data"]],
+        )
+        yield resp_data.data
+
+        next_cursor = resp_data.next_cursor
+        while next_cursor is not None:
+            initial_response: httpx.Response = await self.client.post(
+                f"/search?_next_cursor={next_cursor}&_page_size={page_size}",
+                data=search.model_dump_json(),
+            )
+            initial_response.raise_for_status()
+            raw_data = initial_response.json()
+            resp_data: GetAllResponseModel = GetAllResponseModel(
+                next_cursor=raw_data["next_cursor"],
+                data=[self.dto_out(**row) for row in raw_data["data"]],
+            )
+            yield resp_data.data
+            next_cursor = resp_data.next_cursor

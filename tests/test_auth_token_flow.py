@@ -1,5 +1,6 @@
 import datetime
 from datetime import timedelta
+from typing import Any
 
 import arrow
 import httpx
@@ -8,23 +9,46 @@ from freezegun import freeze_time
 from httpx import AsyncClient
 from litestar import Litestar
 from litestar.testing import AsyncTestClient
+from piccolo.utils.sync import run_sync
 
 from template.tables import APIToken, Users
+from tests.conftest import BaseGiven
 
 
-@pytest.mark.parametrize("session_cookie", ["user_1"], indirect=True)
+Given = BaseGiven()
+
+
+class Then:
+    data: dict[str, Any] = {}
+
+    @property
+    def request_initial_auth_token(self):
+        resp = run_sync(
+            self.data["test_client"].post(
+                "/auth/token/initial",
+                data={"_csrf_token": self.data["csrf_token"]},
+                cookies={
+                    "csrf_token": self.data["csrf_token"],
+                    "id": self.data["session_cookie"],
+                },
+                follow_redirects=False,
+            )
+        )
+        return resp
+
+
 async def test_getting_token_from_session(
     test_client: AsyncTestClient[Litestar],
-    session_cookie,
-    csrf_token,
     patch_saq,
 ):
-    resp: httpx.Response = await test_client.post(
-        "/auth/token/initial",
-        data={"_csrf_token": csrf_token},
-        cookies={"csrf_token": csrf_token, "id": session_cookie},
-        follow_redirects=False,
-    )
+    csrf_token = Given.csrf_token(test_client)
+    session_cookie = Given.user("user_1").session_cookie
+    then = Then()
+    then.data["test_client"] = test_client
+    then.data["csrf_token"] = csrf_token
+    then.data["session_cookie"] = session_cookie
+
+    resp: httpx.Response = then.request_initial_auth_token
     assert resp.status_code == 201
     data = resp.json()
     assert "token" in data
@@ -37,13 +61,12 @@ async def test_getting_token_from_session(
     # }
 
 
-@pytest.mark.parametrize("session_cookie", ["user_1"], indirect=True)
 async def test_guard(
     test_client: AsyncTestClient[Litestar],
-    session_cookie,
-    csrf_token,
     patch_saq,
 ):
+    csrf_token = Given.csrf_token(test_client)
+    session_cookie = Given.user("user_1").session_cookie
     resp_1: httpx.Response = await test_client.post(
         "/auth/token/refresh",
         data={"_csrf_token": csrf_token},
@@ -59,14 +82,13 @@ async def test_guard(
     assert resp_2.status_code == 401
 
 
-@pytest.mark.parametrize("session_cookie", ["user_1"], indirect=True)
 @freeze_time("2013-04-09")
 async def test_token_extension_route(
     test_client: AsyncTestClient[Litestar],
-    session_cookie,
-    csrf_token,
     patch_saq,
 ):
+    csrf_token = Given.csrf_token(test_client)
+    session_cookie = Given.user("user_1").session_cookie
     resp: httpx.Response = await test_client.post(
         "/auth/token/initial",
         data={"_csrf_token": csrf_token},
@@ -136,13 +158,12 @@ async def test_token_extension_new_token(patch_saq):
     assert t_1.token != t_3.token
 
 
-@pytest.mark.parametrize("session_cookie", ["user_1"], indirect=True)
 async def test_delete(
     test_client: AsyncTestClient[Litestar],
-    session_cookie,
-    csrf_token,
     patch_saq,
 ):
+    csrf_token = Given.csrf_token(test_client)
+    session_cookie = Given.user("user_1").session_cookie
     resp: httpx.Response = await test_client.post(
         "/auth/token/initial",
         data={"_csrf_token": csrf_token},
