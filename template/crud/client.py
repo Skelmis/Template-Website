@@ -6,7 +6,11 @@ import httpx
 from httpx_retries import RetryTransport, Retry
 from pydantic import BaseModel, Field
 
-from template.crud.controller import SearchRequestModel, SearchModel
+from template.crud.controller import (
+    SearchRequestModel,
+    SearchModel,
+    OrderByRequestModel,
+)
 
 MODEL_IN = TypeVar("MODEL_IN")
 MODEL_OUT = TypeVar("MODEL_OUT")
@@ -61,17 +65,20 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
         )
         self.dto_out: type[MODEL_OUT] = dto_out
 
-    async def get_all_records_as_list(self, page_size: int = 500) -> list[MODEL_OUT]:
+    async def get_all_records_as_list(
+        self, *, page_size: int = 500, order_by: OrderByRequestModel | None = None
+    ) -> list[MODEL_OUT]:
         data = []
-        async for entry in self.get_all_records(page_size=page_size):
+        async for entry in self.get_all_records(page_size=page_size, order_by=order_by):
             data.extend(entry)
         return data
 
     async def get_all_records(
-        self, page_size: int = 500
+        self, *, page_size: int = 500, order_by: OrderByRequestModel | None = None
     ) -> AsyncGenerator[list[MODEL_OUT], None]:
+        order_by = f"&order_by=" + order_by.model_dump_json() if order_by else ""
         initial_response: httpx.Response = await self.client.get(
-            f"/?_page_size={page_size}"
+            f"/?_page_size={page_size}{order_by}"
         )
         initial_response.raise_for_status()
         raw_data = initial_response.json()
@@ -80,11 +87,12 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
             data=[self.dto_out(**row) for row in raw_data["data"]],
         )
         yield resp_data.data
+        print(resp_data.data)
 
         next_cursor = resp_data.next_cursor
         while next_cursor is not None:
             initial_response: httpx.Response = await self.client.get(
-                f"/?_next_cursor={next_cursor}&_page_size={page_size}"
+                f"/?_next_cursor={next_cursor}&_page_size={page_size}{order_by}"
             )
             initial_response.raise_for_status()
             raw_data = initial_response.json()
@@ -93,6 +101,7 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
                 data=[self.dto_out(**row) for row in raw_data["data"]],
             )
             yield resp_data.data
+            print(resp_data.data)
             next_cursor = resp_data.next_cursor
 
     async def get_total_record_count(self) -> GetCountResponseModel:

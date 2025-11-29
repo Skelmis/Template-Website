@@ -1,7 +1,10 @@
+import json
 from typing import Self, Any
 from unittest.mock import AsyncMock
 
+import pytest
 from piccolo.columns import Column
+from litestar.exceptions import ValidationException
 
 from template.controllers.api import APIAlertController
 from template.crud.controller import (
@@ -83,111 +86,104 @@ class Given:
         return lookups
 
 
+async def test_type_checking_on_bad_types():
+    with pytest.raises(ValidationException) as e:
+        await SearchAddons.validate_search_input_filters(
+            SearchModel(
+                filters=[
+                    SearchItemIn(
+                        column_name="target", operation="equals", search_value="test"
+                    )
+                ]
+            ),
+            Given.default_searchable_columns().filters,
+        )
+
+    assert e.value.detail == json.dumps(
+        ["Value 'test' not a supported type for column 'target', expected 'int'."]
+    )
+
+
 # noinspection PyProtectedMember
 async def test_validate_filters_on_bad_data():
-    r_1 = await SearchAddons.validate_search_input_filters(
-        SearchModel(
-            filters=[
-                SearchItemIn(
-                    column_name="test", operation="equals", search_value="test"
-                )
-            ]
-        ),
-        Given.default_searchable_columns().filters,
-    )
-    assert r_1 == {
-        "detail": "Your submission had issues",
-        "status_code": 400,
-        "extra": {"errors": ["Column 'test' not supported"]},
-    }
+    with pytest.raises(ValidationException) as e:
+        await SearchAddons.validate_search_input_filters(
+            SearchModel(
+                filters=[
+                    SearchItemIn(
+                        column_name="test", operation="equals", search_value="test"
+                    )
+                ]
+            ),
+            Given.default_searchable_columns().filters,
+        )
 
-    r_2 = await SearchAddons.validate_search_input_filters(
-        SearchModel(
-            filters=[
-                SearchItemIn(
-                    column_name="target", operation="less_then", search_value="test"
-                )
-            ]
-        ),
-        Given.default_searchable_columns().filters,
-    )
-    assert r_2 == {
-        "detail": "Your submission had issues",
-        "status_code": 400,
-        "extra": {"errors": ["Operation 'less_then' not supported on column 'target'"]},
-    }
+    assert e.value.detail == json.dumps(["Column 'test' not supported"])
 
-    r_3 = await SearchAddons.validate_search_input_filters(
-        SearchModel(
-            filters=[
-                SearchItemIn(
-                    column_name="target", operation="equals", search_value="test"
-                )
-            ]
-        ),
-        Given.default_searchable_columns().filters,
-    )
-    assert r_3 == {
-        "detail": "Your submission had issues",
-        "status_code": 400,
-        "extra": {
-            "errors": [
-                "Value 'test' not a supported type for column 'target'. "
-                "Expected 'int', got 'str is not an instance of int'"
-            ]
-        },
-    }
+    with pytest.raises(ValidationException) as e:
+        await SearchAddons.validate_search_input_filters(
+            SearchModel(
+                filters=[
+                    SearchItemIn(
+                        column_name="target", operation="less_then", search_value="test"
+                    )
+                ]
+            ),
+            Given.default_searchable_columns().filters,
+        )
 
-    r_4 = await SearchAddons.validate_search_input_filters(
-        SearchModel(
-            filters=[
-                JoinModel.model_construct(
-                    operand="test",
-                    filters=[
-                        SearchItemIn(
-                            column_name="message",
-                            operation="equals",
-                            search_value="test",
-                        ),
-                        SearchItemIn(
-                            column_name="message",
-                            operation="equals",
-                            search_value="test",
-                        ),
-                    ],
-                ),
-            ]
-        ),
-        Given.default_searchable_columns().filters,
+    assert e.value.detail == json.dumps(
+        ["Operation 'less_then' not supported on column 'target'"]
     )
-    assert r_4 == {
-        "detail": "Your submission had issues",
-        "status_code": 400,
-        "extra": {"errors": ["Value 'test' is not a supported join operand."]},
-    }
 
-    r_5 = await SearchAddons.validate_search_input_filters(
-        SearchModel(
-            filters=[
-                JoinModel.model_construct(
-                    operand="and",
-                    filters=[
-                        SearchItemIn(
-                            column_name="message",
-                            operation="equals",
-                            search_value="test",
-                        ),
-                    ],
-                ),
-            ]
-        ),
-        Given.default_searchable_columns().filters,
+    with pytest.raises(ValidationException) as e:
+        await SearchAddons.validate_search_input_filters(
+            SearchModel(
+                filters=[
+                    JoinModel.model_construct(
+                        operand="test",
+                        filters=[
+                            SearchItemIn(
+                                column_name="message",
+                                operation="equals",
+                                search_value="test",
+                            ),
+                            SearchItemIn(
+                                column_name="message",
+                                operation="equals",
+                                search_value="test",
+                            ),
+                        ],
+                    ),
+                ]
+            ),
+            Given.default_searchable_columns().filters,
+        )
+
+    assert e.value.detail == json.dumps(
+        ["Value 'test' is not a supported join operand."]
     )
-    assert r_5 == {
-        "detail": "Your submission had issues",
-        "status_code": 400,
-        "extra": {"errors": ["Join 'and' requires two parameters"]},
-    }
+
+    with pytest.raises(ValidationException) as e:
+        await SearchAddons.validate_search_input_filters(
+            SearchModel(
+                filters=[
+                    JoinModel.model_construct(
+                        operand="and",
+                        filters=[
+                            SearchItemIn(
+                                column_name="message",
+                                operation="equals",
+                                search_value="test",
+                            ),
+                        ],
+                    ),
+                ]
+            ),
+            Given.default_searchable_columns().filters,
+        )
+
+    assert e.value.detail == json.dumps(["Join 'and' requires two parameters"])
 
 
 async def test_filters_on_correct_data():

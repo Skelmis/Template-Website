@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-import ast
 import base64
 import dataclasses
-from typing import Any, TypeVar, Generic, Annotated, Mapping, Literal
+import hashlib
+import hmac
+from copy import deepcopy
+from functools import reduce
+from typing import Any, TypeVar, Generic, Annotated, Mapping, Literal, Final
 
 import commons
+import orjson
 from litestar import Controller, Request
 from litestar.exceptions import ValidationException
 from litestar.openapi import ResponseSpec
@@ -22,10 +26,16 @@ from piccolo.columns.operators.comparison import (
     ILike,
     NotLike,
 )
-from piccolo.query import Objects, Count
+from piccolo.query import Objects, Count, OrderByRaw
 from piccolo.table import Table
-from pydantic import BaseModel, Field, ConfigDict
-from typeguard import check_type, TypeCheckError
+from pydantic import (
+    BaseModel,
+    Field,
+    ConfigDict,
+    model_validator,
+    create_model,
+    ValidationError,
+)
 
 from template.exception_handlers import APIRedirectForAuth
 
@@ -289,25 +299,19 @@ class SearchAddons:
                 continue
 
             try:
-                check_type(
-                    entry.search_value, supported_operations[entry.column_name][0]
+                dynamic_model = create_model(
+                    "TestCastModel", test=supported_operations[entry.column_name][0]
                 )
-            except TypeCheckError as e:
+                dynamic_model(test=entry.search_value)
+            except ValidationError:
                 issues.append(
-                    f"Value {repr(entry.search_value)} not a supported type for column {repr(entry.column_name)}. "
-                    f"Expected {repr(supported_operations[entry.column_name][0].__name__)}, got {repr(str(e))}"
+                    f"Value {repr(entry.search_value)} not a supported type for column {repr(entry.column_name)}, "
+                    f"expected {repr(supported_operations[entry.column_name][0].__name__)}."
                 )
                 continue
 
-        return (
-            None
-            if not issues
-            else {
-                "detail": "Your submission had issues",
-                "status_code": 400,
-                "extra": {"errors": issues},
-            }
-        )
+        if issues:
+            raise ValidationException(issues)
 
     @classmethod
     async def apply_filters_to_query(
@@ -349,7 +353,11 @@ class SearchAddons:
             elif wrapper is bool:
                 search_value = commons.value_to_bool(entry.search_value)
             else:
-                search_value = wrapper(entry.search_value)
+                # Safer then an eval
+                dynamic_model = create_model("TestCastModel", search_value=wrapper)
+                search_value = dynamic_model(
+                    search_value=entry.search_value
+                ).search_value  # noqa
 
             output.append(
                 Where(
@@ -362,6 +370,38 @@ class SearchAddons:
         return output
 
 
+class OrderBy(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    column: Column
+    column_name: str
+    length_function: Literal["length", "array_length"] = Field(
+        default="length", description="The SQL function to use when computing length"
+    )
+
+
+class OrderByFilters(BaseModel):
+    column_name: str = Field(description="The column to order by")
+    order: Literal["ascending", "descending"] = Field(
+        default="ascending", description="The order to apply for this column"
+    )
+    order_by_length: bool = Field(
+        default=False,
+        description="If set to true, becomes 'ORDER BY LENGTH(Column)' instead of 'ORDER BY Column'",
+    )
+
+
+class OrderByRequestModel(BaseModel):
+    fields: list[OrderByFilters]
+
+    @model_validator(mode="before")
+    @classmethod
+    def cast_to_expected(cls, data: Any) -> Any:
+        if data is None or data and isinstance(data, dict):
+            return data
+
+        return orjson.loads(data)
+
+
 @dataclasses.dataclass
 class CRUDMeta:
     BASE_CLASS: type[Table]
@@ -370,6 +410,8 @@ class CRUDMeta:
     """The primary key to be used for filtering against"""
     BASE_CLASS_CURSOR_COL: Column
     """The column to build cursors from"""
+    FOREIGN_KEY_CURSOR_COLS: dict[Table, Column]
+    """The column to build cursors from when finding a foreign key"""
     BASE_CLASS_ORDER_BY: Column
     """The column to order queries by. Usually .id works here"""
     DTO_OUT: type[BaseModel]
@@ -378,6 +420,8 @@ class CRUDMeta:
     """A list of columns to always pre-fetch"""
     AVAILABLE_FILTERS: list[SearchableColumn] = dataclasses.field(default_factory=list)
     """A list of columns that can be filtered by for what operations"""
+    AVAILABLE_ORDER_BY_OPTIONS: list[OrderBy] = dataclasses.field(default_factory=list)
+    """Ways end users can order results. All columns must NOT be nullable or results will be missing."""
 
 
 def get_user_ratelimit_key(request: Request[Any, Any, Any]) -> str:
@@ -409,23 +453,89 @@ class CRUDController(Controller, Generic[ModelOutT]):
     tags = ["CRUD"]
     opt = {"is_api_route": True}
     META: CRUDMeta
+    CURSOR_SEP: Final[str] = "¦"
+    CURSOR_SENTINEL: Final[str] = "😞"
 
-    def _encode_cursor(self, value: Any) -> str | None:
+    def _build_order_matches(self) -> dict[str, OrderBy]:
+        return {o.column_name: o for o in self.META.AVAILABLE_ORDER_BY_OPTIONS}
+
+    def _get_cursor_order_hash(self, order_by: OrderByRequestModel | None) -> str:
+        if order_by is None:
+            return "null"
+
+        return hashlib.sha256(
+            orjson.dumps(order_by.model_dump_json())
+        ).hexdigest()  # [:7]
+
+    def _build_cursor(self, value: Any, order_by: OrderByRequestModel | None) -> str:
+        return f"{value}{self.CURSOR_SEP}{self._get_cursor_order_hash(order_by)}"
+
+    def _encode_cursor(
+        self, value: Any, order_by: OrderByRequestModel | None, extras: list[str]
+    ) -> str | None:
         if value is None:
             return None
 
-        return base64.urlsafe_b64encode(str(value).encode("ascii")).decode("ascii")
+        cursor = self._build_cursor(value, order_by)
+        if extras:
+            cursor = f"{cursor}{self.CURSOR_SEP}{self.CURSOR_SEP.join(extras)}"
 
-    def _decode_cursor(self, value: str | None) -> Any:
-        if value is None:
-            return None
+        return base64.urlsafe_b64encode(cursor.encode("utf-8")).decode("utf-8")
 
-        return self._value_to_cursor_value(
-            base64.urlsafe_b64decode(value.encode("ascii"))
+    def _decode_cursor(
+        self, value: str | None, order_by: OrderByRequestModel | None
+    ) -> tuple[Any, list[tuple[Column, Any]]]:
+        if value is None or not value:
+            return None, []
+
+        out = (
+            base64.urlsafe_b64decode(value.encode("utf-8"))
+            .decode("utf-8")
+            .split(self.CURSOR_SEP)
         )
+        if len(out) < 2:
+            raise ValidationException(
+                "Next cursor is malformed, try not modifying it next time."
+            )
 
-    def _value_to_cursor_value(self, value: Any) -> Any:
-        return self.META.BASE_CLASS_CURSOR_COL.value_type(value)
+        cursor_raw = out.pop(0)
+        order_by_raw = out.pop(0)
+        # Anything left should be turned into where clauses
+
+        if not hmac.compare_digest(self._get_cursor_order_hash(order_by), order_by_raw):
+            raise ValidationException(
+                "The ordering has changed between calls. "
+                "Please ensure your order stays consistent across pagination."
+            )
+
+        extra: list[tuple[Column, Any]] = []
+        if out:
+            matches = self._build_order_matches()
+            for item in out:
+                col, val = item.split(",", maxsplit=1)
+                if col not in matches:
+                    raise ValidationException("Next cursor is malformed")
+
+                column = matches[col].column
+                extra.append((column, self._value_to_cursor_value(val, column=column)))
+
+        return self._value_to_cursor_value(cursor_raw), extra
+
+    def _value_to_cursor_value(self, value: Any, *, column: Column = None) -> Any:
+        if column is None:
+            column = self.META.BASE_CLASS_CURSOR_COL
+
+        if value == self.CURSOR_SENTINEL:
+            # It's a sentinel value anywho
+            return None
+
+        if column._meta.null:
+            out_type = column.value_type | None
+        else:
+            out_type = column.value_type
+
+        dynamic_model = create_model("TestCastModel", test=out_type)
+        return dynamic_model(test=value).test
 
     def _value_to_pk_value(self, value: Any) -> Any:
         """Turns a value into the correct type for the primary key"""
@@ -433,6 +543,86 @@ class CRUDController(Controller, Generic[ModelOutT]):
 
     def _transform_row_to_output(self, row: Table) -> ModelOutT:
         return self.META.DTO_OUT(**row.to_dict())
+
+    async def build_base_query(
+        self,
+        request: Request,
+        *,
+        page_size: int,
+        next_cursor: str | None,
+        order_by: OrderByRequestModel | None,
+    ) -> QueryT:
+        base_query = self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS).limit(
+            page_size + 1
+        )
+        base_query = await self.add_custom_where(request, base_query)
+        if order_by is None:
+            base_query = base_query.order_by(self.META.BASE_CLASS_ORDER_BY)
+        else:
+            base_query = await self.apply_custom_ordering(request, base_query, order_by)
+
+        next_cursor, extras = self._decode_cursor(next_cursor, order_by)
+        if next_cursor is not None:
+            if order_by is None:
+                base_query = base_query.where(
+                    self.META.BASE_CLASS_CURSOR_COL >= next_cursor
+                )
+
+            else:
+                # Cursor based pagination with custom order
+                # means we also need wheres for order_bny items
+                # https://medium.com/@george_16060/cursor-based-pagination-with-arbitrary-ordering-b4af6d5e22db
+                possible_and_clauses: list[And | Where] = []
+                equalities: list[Where] = []
+                for col, val in extras:
+                    if not equalities:
+                        # First one, don't use AND's
+                        possible_and_clauses.append(
+                            Where(col, val, operator=GreaterThan)
+                        )
+                        equalities.append(Where(col, val, operator=Equal))
+                        continue
+
+                    possible_and_clauses.append(
+                        And(
+                            Where(col, val, operator=GreaterThan),
+                            reduce(
+                                lambda acc, x: And(acc, x),
+                                equalities[1:],
+                                equalities[0],
+                            ),
+                        )
+                    )
+                    equalities.append(Where(col, val, operator=Equal))
+
+                possible_and_clauses.append(
+                    And(
+                        Where(
+                            self.META.BASE_CLASS_CURSOR_COL,
+                            next_cursor,
+                            operator=GreaterEqualThan,
+                        ),
+                        reduce(
+                            lambda acc, x: And(acc, x), equalities[1:], equalities[0]
+                        ),
+                    )
+                )
+                base_query = base_query.where(
+                    reduce(
+                        lambda acc, x: Or(acc, x),
+                        possible_and_clauses[1:],
+                        possible_and_clauses[0],
+                    )
+                )
+                print(base_query)
+                print(1)
+                # base_query = base_query.where(
+                #     And(self.META.BASE_CLASS_CURSOR_COL >= next_cursor)
+                # )
+                # for column, value in extras:
+                #     base_query = base_query.where()
+
+        return base_query
 
     async def _apply_filters_to_query(
         self,
@@ -443,10 +633,78 @@ class CRUDController(Controller, Generic[ModelOutT]):
             query, search_filters, available_filters=self.META.AVAILABLE_FILTERS
         )
 
+    def _build_order_by_extras(
+        self, final_row, order_by: OrderByRequestModel
+    ) -> list[str]:
+        extras = []
+        # We can assume the object has already been validated
+        match: dict[str, OrderBy] = self._build_order_matches()
+        for field in order_by.fields:
+            value = getattr(
+                final_row,
+                match[field.column_name].column._meta.name,  # type: ignore
+            )
+            if value is None:
+                value = self.CURSOR_SENTINEL
+
+            elif type(value) in self.META.FOREIGN_KEY_CURSOR_COLS:
+                # Likely a foreign key
+                value = getattr(
+                    value,
+                    self.META.FOREIGN_KEY_CURSOR_COLS[type(value)]._meta.name,
+                )
+
+            extras.append(f"{field.column_name},{value}")
+
+        return extras
+
+    async def get_available_order_by(self, request: Request) -> OrderByRequestModel:
+        out_filters: list[OrderByFilters] = []
+        for ob in self.META.AVAILABLE_ORDER_BY_OPTIONS:
+            out_filters.append(OrderByFilters(column_name=ob.column_name))
+
+        return OrderByRequestModel(
+            fields=out_filters,
+        )
+
     async def add_custom_where(self, request: Request, query: QueryT) -> QueryT:
         """Override this method to add custom clauses
         to all queries issue by this controller.
         """
+        return query
+
+    async def apply_custom_ordering(
+        self, request: Request, query: QueryT, order_by: OrderByRequestModel | None
+    ) -> QueryT:
+        if order_by is None:
+            return query
+
+        issues: list[str] = []
+        match: dict[str, OrderBy] = self._build_order_matches()
+        for operand in order_by.fields:
+            if operand.column_name not in match:
+                issues.append(
+                    f"Column {repr(operand.column_name)} is not available to order by"
+                )
+                continue
+
+            model = match[operand.column_name]
+            if not operand.order_by_length:
+                query = query.order_by(
+                    model.column, ascending=operand.order == "ascending"
+                )
+                continue
+
+            # Piccolo doesnt have a Length() flag so do manually
+            order = "ASC" if operand.order == "ascending" else "DESC"
+            col_name = model.column._meta.get_full_name(with_alias=False)
+            query = query.order_by(
+                OrderByRaw(f"{model.length_function}({col_name}) {order}")
+            )
+
+        if issues:
+            raise ValidationException(issues)
+
         return query
 
     async def get_record_count(self, request: Request) -> GetCountResponseModel:
@@ -468,19 +726,20 @@ class CRUDController(Controller, Generic[ModelOutT]):
             ge=1,
         ),
         next_cursor: str | None = Parameter(query="_next_cursor", required=False),
+        order_by: OrderByRequestModel | None = Parameter(
+            query="order_by", required=False
+        ),
     ) -> GetAllResponseModel[TableT]:
         """Fetch all records from this table."""
-        base_query = (
-            self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
-            .limit(page_size + 1)
-            .order_by(self.META.BASE_CLASS_ORDER_BY)
+        base_query = await self.build_base_query(
+            request,
+            page_size=page_size,
+            next_cursor=next_cursor,
+            order_by=order_by,
         )
-        base_query = await self.add_custom_where(request, base_query)
-        next_cursor = self._decode_cursor(next_cursor)
-        if next_cursor is not None:
-            base_query = base_query.where(self.META.BASE_CLASS_PK >= next_cursor)
 
         rows: list[TableT] = await base_query.run()
+        extras = []
         next_cursor = None
         if len(rows) > page_size:
             final_row = rows.pop(-1)
@@ -489,10 +748,12 @@ class CRUDController(Controller, Generic[ModelOutT]):
                 final_row,
                 self.META.BASE_CLASS_CURSOR_COL._meta.name,  # type: ignore
             )
+            if order_by is not None:
+                extras = self._build_order_by_extras(final_row, order_by)
 
         return GetAllResponseModel(
             data=[self._transform_row_to_output(row) for row in rows],
-            next_cursor=self._encode_cursor(next_cursor),
+            next_cursor=self._encode_cursor(next_cursor, order_by, extras),
         )
 
     async def get_available_search_filters(
@@ -514,21 +775,20 @@ class CRUDController(Controller, Generic[ModelOutT]):
             ge=1,
         ),
         next_cursor: str | None = Parameter(query="_next_cursor", required=False),
+        order_by: OrderByRequestModel | None = Parameter(
+            query="order_by", required=False
+        ),
     ) -> GetAllResponseModel[TableT]:
-        base_query = (
-            self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
-            .limit(page_size + 1)
-            .order_by(self.META.BASE_CLASS_ORDER_BY)
+        base_query = await self.build_base_query(
+            request,
+            page_size=page_size,
+            next_cursor=next_cursor,
+            order_by=order_by,
         )
-
         await self._apply_filters_to_query(base_query, search_filters)
 
-        base_query = await self.add_custom_where(request, base_query)
-        next_cursor = self._decode_cursor(next_cursor)
-        if next_cursor is not None:
-            base_query = base_query.where(self.META.BASE_CLASS_PK >= next_cursor)
-
         rows: list[TableT] = await base_query.run()
+        extras = []
         next_cursor = None
         if len(rows) > page_size:
             final_row = rows.pop(-1)
@@ -537,9 +797,12 @@ class CRUDController(Controller, Generic[ModelOutT]):
                 final_row,
                 self.META.BASE_CLASS_CURSOR_COL._meta.name,  # type: ignore
             )
+            if order_by is not None:
+                extras = self._build_order_by_extras(final_row, order_by)
+
         return GetAllResponseModel(
             data=[self._transform_row_to_output(row) for row in rows],
-            next_cursor=self._encode_cursor(next_cursor),
+            next_cursor=self._encode_cursor(next_cursor, order_by, extras),
         )
 
     async def get_object(

@@ -5,7 +5,13 @@ from uuid import UUID
 from pydantic import Field, BaseModel
 
 from template.crud import CRUDClient
-from template.crud.controller import SearchModel, SearchItemIn, JoinModel
+from template.crud.controller import (
+    SearchModel,
+    SearchItemIn,
+    JoinModel,
+    OrderByRequestModel,
+    OrderByFilters,
+)
 from template.tables import AlertLevels, Users, APIToken
 from template.util.table_mixins import utc_now
 
@@ -54,8 +60,8 @@ async def main():
     )
 
     # The CRUDClient even smoothly handles 429's!
-    for _ in range(8):  # Ratelimit is 5/sec
-        await client.get_all_records_as_list()
+    # for _ in range(8):  # Ratelimit is 5/sec
+    #     await client.get_all_records_as_list()
 
     # Create an alert, mark it as seen and then delete it
     alert = await client.create_record(
@@ -88,6 +94,36 @@ async def main():
     )
     total_records = await client.get_total_record_count()
     print(f"We currently have {total_records.total_records} alerts!")
+
+    records_order_1 = await client.get_all_records_as_list(
+        order_by=OrderByRequestModel(
+            fields=[OrderByFilters(column_name="target", order="descending")]
+        ),
+        page_size=2,
+    )
+    print(
+        len(set(r.uuid for r in records_order_1)),
+        [(r.uuid, r.was_shown_at) for r in records_order_1],
+    )
+    return
+    # We can get them in order of seen
+    records_order_1 = await client.get_all_records_as_list(
+        order_by=OrderByRequestModel(
+            fields=[OrderByFilters(column_name="created_at", order="ascending")]
+        ),
+        page_size=2,
+    )
+    print(
+        [(r.uuid, r.was_shown_at) for r in records_order_1],
+    )
+    # Or in the opposite order
+    records_order_2 = await client.get_all_records_as_list(
+        order_by=OrderByRequestModel(
+            fields=[OrderByFilters(column_name="created_at", order="descending")]
+        )
+    )
+    print([(r.uuid, r.was_shown_at) for r in records_order_2])
+    return
 
     have_been_seen = 0
     async for group in client.get_all_records():
