@@ -5,7 +5,7 @@ from uuid import UUID
 from litestar import patch, Request, post, get, delete
 from litestar.middleware.rate_limit import RateLimitConfig
 from litestar.params import Parameter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Json, TypeAdapter
 
 from template.crud.controller import (
     CRUDController,
@@ -19,10 +19,13 @@ from template.crud.controller import (
     SearchRequestModel,
     SearchModel,
     QueryT,
+    OrderByRequestModel,
+    OrderBy,
+    OrderByFilters,
 )
 from template.guards import ensure_api_token
 from template.middleware import UserFromAPIKey
-from template.tables import Alerts, AlertLevels
+from template.tables import Alerts, AlertLevels, Users
 
 
 class NewAlertModel(BaseModel):
@@ -58,6 +61,7 @@ crud_meta = CRUDMeta(
     BASE_CLASS=Alerts,
     BASE_CLASS_PK=Alerts.uuid,
     BASE_CLASS_CURSOR_COL=Alerts.id,
+    FOREIGN_KEY_CURSOR_COLS={Users: Users.id},
     BASE_CLASS_ORDER_BY=Alerts.id,
     DTO_OUT=AlertOutModel,
     PREFETCH_COLUMNS=[Alerts.target],
@@ -92,6 +96,16 @@ crud_meta = CRUDMeta(
             supports_ends_with=True,
         ),
     ],
+    AVAILABLE_ORDER_BY_OPTIONS=[
+        OrderBy(
+            column_name="created_at",
+            column=Alerts.created_at,
+        ),
+        OrderBy(
+            column_name="target",
+            column=Alerts.target,
+        ),
+    ],
 )
 
 
@@ -124,9 +138,12 @@ class APIAlertController[AlertOutModel](CRUDController):
             ge=1,
         ),
         next_cursor: str | None = Parameter(query="_next_cursor", required=False),
+        order_by: OrderByRequestModel | None = Parameter(
+            query="order_by", required=False
+        ),
     ) -> GetAllResponseModel[AlertOutModel]:
         return await super().get_all_records(
-            request, page_size=page_size, next_cursor=next_cursor
+            request, page_size=page_size, next_cursor=next_cursor, order_by=order_by
         )
 
     @get(
@@ -203,6 +220,10 @@ class APIAlertController[AlertOutModel](CRUDController):
             # data.model_dump(exclude_unset=True, exclude_none=True),
         )
 
+    @get("/meta/search/order_by")
+    async def get_available_order_by(self, request: Request) -> OrderByRequestModel:
+        return await super().get_available_order_by(request)
+
     @get("/meta/search/filters")
     async def get_available_search_filters(
         self, request: Request
@@ -222,5 +243,8 @@ class APIAlertController[AlertOutModel](CRUDController):
             ge=1,
         ),
         next_cursor: str | None = Parameter(query="_next_cursor", required=False),
+        order_by: OrderByRequestModel | None = Parameter(
+            query="order_by", required=False
+        ),
     ) -> GetAllResponseModel[AlertOutModel]:
-        return await super().search(request, data, page_size, next_cursor)
+        return await super().search(request, data, page_size, next_cursor, order_by)
