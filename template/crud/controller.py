@@ -24,8 +24,7 @@ from piccolo.columns.operators.comparison import (
 )
 from piccolo.query import Objects, Count
 from piccolo.table import Table
-from pydantic import BaseModel, Field, ConfigDict
-from typeguard import check_type, TypeCheckError
+from pydantic import BaseModel, Field, ConfigDict, ValidationError, create_model
 
 from template.exception_handlers import APIRedirectForAuth
 
@@ -289,25 +288,19 @@ class SearchAddons:
                 continue
 
             try:
-                check_type(
-                    entry.search_value, supported_operations[entry.column_name][0]
+                dynamic_model = create_model(
+                    "TestCastModel", test=supported_operations[entry.column_name][0]
                 )
-            except TypeCheckError as e:
+                dynamic_model(test=entry.search_value)
+            except ValidationError:
                 issues.append(
-                    f"Value {repr(entry.search_value)} not a supported type for column {repr(entry.column_name)}. "
-                    f"Expected {repr(supported_operations[entry.column_name][0].__name__)}, got {repr(str(e))}"
+                    f"Value {repr(entry.search_value)} not a supported type for column {repr(entry.column_name)}, "
+                    f"expected {repr(supported_operations[entry.column_name][0].__name__)}."
                 )
                 continue
 
-        return (
-            None
-            if not issues
-            else {
-                "detail": "Your submission had issues",
-                "status_code": 400,
-                "extra": {"errors": issues},
-            }
-        )
+        if issues:
+            raise ValidationException(issues)
 
     @classmethod
     async def apply_filters_to_query(
@@ -349,7 +342,11 @@ class SearchAddons:
             elif wrapper is bool:
                 search_value = commons.value_to_bool(entry.search_value)
             else:
-                search_value = wrapper(entry.search_value)
+                # Safer then an eval
+                dynamic_model = create_model("TestCastModel", search_value=wrapper)
+                search_value = dynamic_model(
+                    search_value=entry.search_value
+                ).search_value  # noqa
 
             output.append(
                 Where(
