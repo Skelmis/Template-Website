@@ -422,11 +422,18 @@ class CRUDController(Controller, Generic[ModelOutT]):
         )
 
     def _value_to_cursor_value(self, value: Any) -> Any:
-        return self.META.BASE_CLASS_CURSOR_COL.value_type(value)
+        return self._value_to_col_value(self.META.BASE_CLASS_CURSOR_COL, value)
 
     def _value_to_pk_value(self, value: Any) -> Any:
         """Turns a value into the correct type for the primary key"""
-        return self.META.BASE_CLASS_PK.value_type(value)
+        return self._value_to_col_value(self.META.BASE_CLASS_PK, value)
+
+    def _value_to_col_value(self, column: Column, value: Any) -> Any:
+        if isinstance(value, column.value_type):
+            # It's already the correct type
+            return value
+
+        return column.value_type(value)
 
     def _transform_row_to_output(self, row: Table) -> ModelOutT:
         return self.META.DTO_OUT(**row.to_dict())
@@ -567,7 +574,10 @@ class CRUDController(Controller, Generic[ModelOutT]):
             request,
             base_query,  # type: ignore
         )
-        row: CRUDMeta.BASE_CLASS = await base_query.run()
+        row: CRUDMeta.BASE_CLASS | None = await base_query.run()
+        if row is None:
+            raise NotFoundException
+
         return self.META.DTO_OUT(**row.to_dict())
 
     async def delete_object(
