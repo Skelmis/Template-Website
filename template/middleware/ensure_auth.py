@@ -109,4 +109,4 @@ class UserFromAPIKey(AbstractAuthenticationMiddleware):
             raise NotAuthorizedException("This token is expired")
 
         api_token = await APIToken.get_instance_from_token(raw_token)
-        return AuthenticationResult(user=api_token.user, auth=None)
+        return AuthenticationResult(user=api_token.user, auth=api_token)
