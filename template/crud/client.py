@@ -61,6 +61,22 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
         )
         self.dto_out: type[MODEL_OUT] = dto_out
 
+    async def get_record_page(
+        self, page_size: int, next_cursor: str | None = None
+    ) -> GetAllResponseModel:
+        url = f"/?_page_size={page_size}"
+        if next_cursor is not None:
+            url = f"{url}&_next_cursor={next_cursor}"
+
+        initial_response: httpx.Response = await self.client.get(url)
+        initial_response.raise_for_status()
+        raw_data = initial_response.json()
+        resp_data: GetAllResponseModel = GetAllResponseModel(
+            next_cursor=raw_data["next_cursor"],
+            data=[self.dto_out(**row) for row in raw_data["data"]],
+        )
+        return resp_data
+
     async def get_all_records_as_list(self, page_size: int = 500) -> list[MODEL_OUT]:
         data = []
         async for entry in self.get_all_records(page_size=page_size):
@@ -70,30 +86,14 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
     async def get_all_records(
         self, page_size: int = 500
     ) -> AsyncGenerator[list[MODEL_OUT], None]:
-        initial_response: httpx.Response = await self.client.get(
-            f"/?_page_size={page_size}"
-        )
-        initial_response.raise_for_status()
-        raw_data = initial_response.json()
-        resp_data: GetAllResponseModel = GetAllResponseModel(
-            next_cursor=raw_data["next_cursor"],
-            data=[self.dto_out(**row) for row in raw_data["data"]],
-        )
-        yield resp_data.data
+        result = await self.get_record_page(page_size)
+        yield result.data
 
-        next_cursor = resp_data.next_cursor
+        next_cursor = result.next_cursor
         while next_cursor is not None:
-            initial_response: httpx.Response = await self.client.get(
-                f"/?_next_cursor={next_cursor}&_page_size={page_size}"
-            )
-            initial_response.raise_for_status()
-            raw_data = initial_response.json()
-            resp_data: GetAllResponseModel = GetAllResponseModel(
-                next_cursor=raw_data["next_cursor"],
-                data=[self.dto_out(**row) for row in raw_data["data"]],
-            )
-            yield resp_data.data
-            next_cursor = resp_data.next_cursor
+            result = await self.get_record_page(page_size, next_cursor)
+            yield result.data
+            next_cursor = result.next_cursor
 
     async def get_total_record_count(self) -> GetCountResponseModel:
         resp = await self.client.get("/meta/count")
