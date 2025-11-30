@@ -28,6 +28,23 @@ class APIRedirectForAuth(BaseModel):
     redirect_uri: str = Field(description="Where to send a UI user for authentication")
 
 
+class APIErrorModel(BaseModel):
+    status_code: int = Field(description="The status code of this event")
+    detail: str = Field(description="A descriptive error message")
+    extra: dict = Field(description="Extra details")
+
+
+def is_api_route(request: Request) -> bool:
+    """Returns True if this occurred on an API route"""
+    if (
+        hasattr(request, "route_handler")
+        and "is_api_route" in request.route_handler.opt
+        and request.route_handler.opt["is_api_route"] is True
+    ):
+        return True
+    return False
+
+
 def redirect_for_auth(
     request: Request, exc: RedirectForAuth
 ) -> Response[Redirect] | Response[APIRedirectForAuth]:
@@ -36,11 +53,7 @@ def redirect_for_auth(
         str(request.url_for("select_auth_provider")).rstrip("?")
         + f"?next_route={exc.next_route}"
     )
-    if (
-        hasattr(request, "route_handler")
-        and "is_api_route" in request.route_handler.opt
-        and request.route_handler.opt["is_api_route"] is True
-    ):
+    if is_api_route(request):
         return Response(APIRedirectForAuth(redirect_uri=next_url), status_code=401)
 
     return Redirect(next_url)
@@ -51,6 +64,14 @@ def handle_500(request: Request, exc: InternalServerException) -> Response:
         "Internal Server Error",
         extra={"traceback": commons.exception_as_string(exc)},
     )
+    if is_api_route(request):
+        return Response(
+            APIErrorModel(
+                status_code=500, detail="Internal Server Error", extra={}
+            ).model_dump_json(),
+            status_code=500,
+        )
+
     if "user" not in request.scope:
         request.scope["user"] = None  # Needs something
 
@@ -58,6 +79,16 @@ def handle_500(request: Request, exc: InternalServerException) -> Response:
 
 
 def handle_404(request: Request, exc: NotFoundException) -> Response:
+    if is_api_route(request):
+        return Response(
+            APIErrorModel(
+                status_code=404,
+                detail="Route not found",
+                extra={"requested_url": str(request.url)},
+            ).model_dump_json(),
+            status_code=404,
+        )
+
     if "user" not in request.scope:
         request.scope["user"] = None  # Needs something
 

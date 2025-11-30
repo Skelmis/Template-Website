@@ -26,7 +26,7 @@ from piccolo.query import Objects, Count
 from piccolo.table import Table
 from pydantic import BaseModel, Field, ConfigDict, ValidationError, create_model
 
-from template.exception_handlers import APIRedirectForAuth
+from template.exception_handlers import APIRedirectForAuth, APIErrorModel
 
 TableT = TypeVar("TableT")
 ModelOutT = TypeVar("ModelOutT", bound=BaseModel)
@@ -50,7 +50,20 @@ CRUD_BASE_OPENAPI_RESPONSES: Mapping[int, ResponseSpec] = {
                 ).model_dump_json(),
             )
         ],
-    )
+    ),
+    404: ResponseSpec(
+        data_container=APIErrorModel,
+        description="Route not found",
+        examples=[
+            Example(
+                value=APIErrorModel(
+                    status_code=404,
+                    detail="Route not found",
+                    extra={"requested_url": "https://example.com/missing"},
+                ).model_dump_json(),
+            )
+        ],
+    ),
 }
 
 
