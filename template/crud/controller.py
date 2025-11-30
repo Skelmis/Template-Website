@@ -7,7 +7,7 @@ from typing import Any, TypeVar, Generic, Annotated, Mapping, Literal
 
 import commons
 from litestar import Controller, Request
-from litestar.exceptions import ValidationException
+from litestar.exceptions import ValidationException, NotFoundException
 from litestar.openapi import ResponseSpec
 from litestar.openapi.spec import Example
 from litestar.params import Parameter
@@ -431,6 +431,27 @@ class CRUDController(Controller, Generic[ModelOutT]):
     def _transform_row_to_output(self, row: Table) -> ModelOutT:
         return self.META.DTO_OUT(**row.to_dict())
 
+    async def build_base_query(
+        self,
+        request: Request,
+        *,
+        page_size: int,
+        next_cursor: str | None,
+    ) -> QueryT:
+        base_query = (
+            self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
+            .limit(page_size + 1)
+            .order_by(self.META.BASE_CLASS_ORDER_BY)
+        )
+        base_query = await self.add_custom_where(request, base_query)
+        next_cursor = self._decode_cursor(next_cursor)
+        if next_cursor is not None:
+            base_query = base_query.where(
+                self.META.BASE_CLASS_CURSOR_COL >= next_cursor
+            )
+
+        return base_query
+
     async def _apply_filters_to_query(
         self,
         query: QueryT,
@@ -467,15 +488,9 @@ class CRUDController(Controller, Generic[ModelOutT]):
         next_cursor: str | None = Parameter(query="_next_cursor", required=False),
     ) -> GetAllResponseModel[TableT]:
         """Fetch all records from this table."""
-        base_query = (
-            self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
-            .limit(page_size + 1)
-            .order_by(self.META.BASE_CLASS_ORDER_BY)
+        base_query = await self.build_base_query(
+            request, page_size=page_size, next_cursor=next_cursor
         )
-        base_query = await self.add_custom_where(request, base_query)
-        next_cursor = self._decode_cursor(next_cursor)
-        if next_cursor is not None:
-            base_query = base_query.where(self.META.BASE_CLASS_PK >= next_cursor)
 
         rows: list[TableT] = await base_query.run()
         next_cursor = None
@@ -512,18 +527,10 @@ class CRUDController(Controller, Generic[ModelOutT]):
         ),
         next_cursor: str | None = Parameter(query="_next_cursor", required=False),
     ) -> GetAllResponseModel[TableT]:
-        base_query = (
-            self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
-            .limit(page_size + 1)
-            .order_by(self.META.BASE_CLASS_ORDER_BY)
+        base_query = await self.build_base_query(
+            request, page_size=page_size, next_cursor=next_cursor
         )
-
         await self._apply_filters_to_query(base_query, search_filters)
-
-        base_query = await self.add_custom_where(request, base_query)
-        next_cursor = self._decode_cursor(next_cursor)
-        if next_cursor is not None:
-            base_query = base_query.where(self.META.BASE_CLASS_PK >= next_cursor)
 
         rows: list[TableT] = await base_query.run()
         next_cursor = None
@@ -618,6 +625,9 @@ class CRUDController(Controller, Generic[ModelOutT]):
             request,
             base_query,  # type: ignore
         )
-        row: CRUDMeta.BASE_CLASS = await base_query.run()
+        row: CRUDMeta.BASE_CLASS | None = await base_query.run()
+        if row is None:
+            raise NotFoundException
+
         await row.update_self(data)
         return self.META.DTO_OUT(**row.to_dict())
