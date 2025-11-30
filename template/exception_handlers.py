@@ -54,7 +54,7 @@ def handle_500(request: Request, exc: InternalServerException) -> Response:
     if "user" not in request.scope:
         request.scope["user"] = None  # Needs something
 
-    return html_template("codes/500.jinja", status_code=404)
+    return html_template("codes/500.jinja", status_code=500)
 
 
 def handle_404(request: Request, exc: NotFoundException) -> Response:
