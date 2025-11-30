@@ -40,6 +40,7 @@ class AlertPatchModel(BaseModel):
     )
 
 
+# noinspection PyTypeChecker
 async def main():
     # Fake an auth session
     user = await Users.objects().first()
@@ -59,7 +60,7 @@ async def main():
 
     # Create an alert, mark it as seen and then delete it
     alert = await client.create_record(
-        NewAlertModel(target=1, message="Hello World!", level=AlertLevels.INFO)
+        NewAlertModel(target=user.id, message="Hello World!", level=AlertLevels.INFO)
     )
     await client.patch_record(
         alert.uuid, AlertPatchModel(has_been_shown=True, was_shown_at=utc_now())
@@ -68,10 +69,10 @@ async def main():
 
     # Create some alerts, iterate over them and refetch some
     await client.create_record(
-        NewAlertModel(target=1, message="Hello World!", level=AlertLevels.INFO)
+        NewAlertModel(target=user.id, message="Hello World!", level=AlertLevels.INFO)
     )
     alert_1 = await client.create_record(
-        NewAlertModel(target=1, message="Oh no", level=AlertLevels.WARNING)
+        NewAlertModel(target=user.id, message="Oh no", level=AlertLevels.WARNING)
     )
     await client.patch_record(
         alert_1.uuid, AlertPatchModel(was_shown_at=utc_now(), has_been_shown=True)
@@ -81,7 +82,7 @@ async def main():
         alert_1.uuid, AlertPatchModel(has_been_shown=False, was_shown_at=None)
     )
     alert_2 = await client.create_record(
-        NewAlertModel(target=1, message="Not good!", level=AlertLevels.ERROR)
+        NewAlertModel(target=user.id, message="Not good!", level=AlertLevels.ERROR)
     )
     await client.patch_record(
         alert_2.uuid, AlertPatchModel(was_shown_at=utc_now(), has_been_shown=True)
@@ -104,16 +105,16 @@ async def main():
 
     # --- No alerts exist at this stage ---
     alert_1 = await client.create_record(
-        NewAlertModel(target=1, message="Not good!", level=AlertLevels.WARNING)
+        NewAlertModel(target=user.id, message="Not good!", level=AlertLevels.WARNING)
     )
     await client.patch_record(
         alert_1.uuid, AlertPatchModel(was_shown_at=utc_now(), has_been_shown=True)
     )
     await client.create_record(
-        NewAlertModel(target=1, message="Its fine", level=AlertLevels.ERROR)
+        NewAlertModel(target=user.id, message="Its fine", level=AlertLevels.ERROR)
     )
     await client.create_record(
-        NewAlertModel(target=1, message="Hello World", level=AlertLevels.INFO)
+        NewAlertModel(target=user.id, message="Hello World", level=AlertLevels.INFO)
     )
     await client.create_record(
         NewAlertModel(target=2, message="Nice!", level=AlertLevels.SUCCESS)

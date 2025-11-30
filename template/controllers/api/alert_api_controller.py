@@ -3,6 +3,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from litestar import patch, Request, post, get, delete
+from litestar.datastructures import State
 from litestar.middleware.rate_limit import RateLimitConfig
 from litestar.params import Parameter
 from pydantic import BaseModel, Field
@@ -22,7 +23,7 @@ from template.crud.controller import (
 )
 from template.guards import ensure_api_token
 from template.middleware import UserFromAPIKey
-from template.tables import Alerts, AlertLevels
+from template.tables import Alerts, AlertLevels, Users, APIToken
 
 
 class NewAlertModel(BaseModel):
@@ -106,8 +107,11 @@ class APIAlertController[AlertOutModel](CRUDController):
     tags = ["Alerts"]
     META = crud_meta
     # middleware = [UserFromAPIKey, rate_limit_config.middleware]
-    # guards = [ensure_api_token]
     # security = [{"apiKey": []}]
+
+    async def add_custom_where(self, request: Request, query: QueryT) -> QueryT:
+        # noinspection PyTypeChecker
+        return query.where(Alerts.target == request.user)
 
     @get(
         "/",
@@ -115,7 +119,7 @@ class APIAlertController[AlertOutModel](CRUDController):
     )
     async def get_all_records(
         self,
-        request: Request,
+        request: Request[Users, APIToken, State],
         page_size: int = Parameter(
             query="_page_size",
             default=500,
@@ -130,14 +134,14 @@ class APIAlertController[AlertOutModel](CRUDController):
         )
 
     @get(
-        "/{primary_key:str}",
+        "/{primary_key:uuid}",
         responses=CRUD_BASE_OPENAPI_RESPONSES,
     )
     async def get_object(
         self,
         request: Request,
         primary_key: Annotated[
-            Any,
+            UUID,
             Parameter(
                 title="Object ID",
                 description="The ID of the object you wish to retrieve",

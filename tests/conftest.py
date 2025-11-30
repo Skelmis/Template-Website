@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Self
 from unittest.mock import AsyncMock
@@ -14,7 +15,7 @@ from piccolo.utils.sync import run_sync
 
 from template.controllers import AuthController
 from template.saq.worker import SAQ_QUEUE
-from template.tables import Users
+from template.tables import Users, APIToken
 
 if TYPE_CHECKING:
     from litestar import Litestar
@@ -86,10 +87,31 @@ class BaseGiven:
         return self
 
     @property
+    def object(self) -> Users:
+        return self.data["user"]
+
+    @property
     def session_cookie(self) -> str:
         assert "user" in self.data, "Given must have called user first"
         return run_sync(AuthController.create_session_for_user(self.data["user"]))
 
+    @property
+    def api_token(self) -> APIToken:
+        return run_sync(
+            APIToken.create_api_token(
+                self.data["user"],
+                datetime.timedelta(hours=2),
+                datetime.timedelta(days=1),
+            )
+        )
+
     def csrf_token(self, test_client: AsyncTestClient[Litestar]) -> str:
         resp = run_sync(test_client.get("/"))
         return resp.cookies["csrf_token"]
+
+
+class BaseWhen:
+
+    @property
+    def db(self) -> Self:
+        return self

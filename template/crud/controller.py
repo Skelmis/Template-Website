@@ -605,14 +605,19 @@ class CRUDController(Controller, Generic[ModelOutT]):
         ],
     ):
         primary_key = self._value_to_pk_value(primary_key)
-        base_query = self.META.BASE_CLASS.delete().where(
-            self.META.BASE_CLASS_PK == primary_key
+
+        base_query = (
+            self.META.BASE_CLASS.delete()
+            .where(self.META.BASE_CLASS_PK == primary_key)
+            .returning(self.META.BASE_CLASS_PK)
         )
         base_query = await self.add_custom_where(
             request,
             base_query,  # type: ignore
         )
-        await base_query.run()
+        result = await base_query.run()
+        if not result:
+            raise NotFoundException
         return None
 
     async def create_object(self, request: Request, data: ModelInT) -> ModelOutT:
