@@ -48,6 +48,7 @@ from template.tables import (
     MagicLinks,
     Alerts,
     AuthenticationAttempts,
+    APIToken,
 )
 from template.util.flash import inject_alerts
 
@@ -154,11 +155,30 @@ async def close_database_connection_pool():
         print("Unable to connect to the database")
 
 
-async def before_request_handler(request: Request) -> dict[str, str] | None:
-    user = await EnsureAuth.get_user_from_connection(request, fail_on_not_set=False)
-    request.scope["user"] = user
-    if user is not None:
-        await inject_alerts(request, user)
+async def inject_alerts_on_ui_view(request: Request) -> dict[str, str] | None:
+    if "user" not in request.scope:
+        # Try to ensure we always have a user present
+        # even if the route doesn't explicitly want one
+        if "X-API-KEY" in request.headers:
+            raw_token = request.headers["X-API-KEY"]
+            if await APIToken.validate_token_is_valid(raw_token):
+                api_token = await APIToken.get_instance_from_token(raw_token)
+                request.scope["user"] = api_token.user
+                request.scope["auth"] = api_token
+
+        else:
+            user = await EnsureAuth.get_user_from_connection(
+                request, fail_on_not_set=False
+            )
+            request.scope["user"] = user
+
+    if "user" in request.scope and request.scope["user"] is not None:
+        # We have an authed user
+        if "auth" in request.scope and isinstance(request.scope["auth"], APIToken):
+            # It's an API client, no point in showing alerts
+            pass
+        else:
+            await inject_alerts(request, request.scope["user"])
 
     return None
 
@@ -339,5 +359,5 @@ app = Litestar(
         ),
     ],
     exception_handlers=exception_handlers,
-    before_request=before_request_handler,
+    before_request=inject_alerts_on_ui_view,
 )
