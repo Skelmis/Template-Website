@@ -419,6 +419,11 @@ class CRUDController(Controller, Generic[ModelOutT]):
     tags = ["CRUD"]
     opt = {"is_api_route": True}
     META: CRUDMeta
+    PATCH_ROW_LOCK_LEVEL: Literal["UPDATE", "NO KEY UPDATE"] = "NO KEY UPDATE"
+    """The level at which transactions should lock the PATCH route.
+    
+    Leave as is unless you plan on letting users edit ids/foreign keys
+    """
 
     def _encode_cursor(self, value: Any) -> str | None:
         if value is None:
@@ -648,7 +653,9 @@ class CRUDController(Controller, Generic[ModelOutT]):
             base_query = (
                 self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
                 .where(self.META.BASE_CLASS_PK == primary_key)
-                .lock_rows("NO KEY UPDATE", nowait=True)
+                .lock_rows(
+                    self.PATCH_ROW_LOCK_LEVEL, nowait=True, of=(self.META.BASE_CLASS,)
+                )
                 .first()
             )
             base_query = await self.add_custom_where(
