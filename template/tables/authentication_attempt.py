@@ -18,7 +18,11 @@ from template.util.table_mixins import utc_now, AuditMixin
 from template.tables import Users
 
 
-class AuthenticationAttempts(AuditMixin, Table):
+class AuthenticationAttempts(
+    AuditMixin,
+    Table,
+    help_text="Logs authentication attempts against legitimate accounts",
+):
     if TYPE_CHECKING:
         id: Serial
 
