@@ -644,18 +644,21 @@ class CRUDController(Controller, Generic[ModelOutT]):
         data: dict[str, Any],
     ) -> ModelOutT:
         primary_key = self._value_to_pk_value(primary_key)
-        base_query = (
-            self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
-            .where(self.META.BASE_CLASS_PK == primary_key)
-            .first()
-        )
-        base_query = await self.add_custom_where(
-            request,
-            base_query,  # type: ignore
-        )
-        row: CRUDMeta.BASE_CLASS | None = await base_query.run()
-        if row is None:
-            raise NotFoundException
+        async with self.META.BASE_CLASS._meta.db.transaction():
+            base_query = (
+                self.META.BASE_CLASS.objects(*self.META.PREFETCH_COLUMNS)
+                .where(self.META.BASE_CLASS_PK == primary_key)
+                .lock_rows("NO KEY UPDATE", nowait=True)
+                .first()
+            )
+            base_query = await self.add_custom_where(
+                request,
+                base_query,  # type: ignore
+            )
+            row: CRUDMeta.BASE_CLASS | None = await base_query.run()
+            if row is None:
+                raise NotFoundException
 
-        await row.update_self(data)
+            await row.update_self(data)
+
         return self.META.DTO_OUT(**row.to_dict())
