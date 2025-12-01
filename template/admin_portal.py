@@ -53,7 +53,13 @@ def configure_piccolo_admin():
         ],
     )
     oauth_entry_tc = TableConfig(OAuthEntry, menu_group="User Management")
-    auth_attempt_tc = TableConfig(AuthenticationAttempts, menu_group="Auditing")
+    auth_attempt_tc = TableConfig(
+        AuthenticationAttempts,
+        menu_group="Auditing",
+        order_by=[
+            OrderBy(AuthenticationAttempts.id, ascending=False),
+        ],
+    )
     magic_links_tc = TableConfig(
         MagicLinks,
         menu_group="User Management",
