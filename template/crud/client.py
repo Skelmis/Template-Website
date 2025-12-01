@@ -25,7 +25,7 @@ class GetCountResponseModel(BaseModel):
     )
 
 
-class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
+class CRUDClient(Generic[MODEL_IN, MODEL_PATCH_IN, MODEL_OUT]):
     def __init__(
         self,
         base_url: str,

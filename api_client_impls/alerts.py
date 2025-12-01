@@ -48,7 +48,7 @@ async def main():
         user, datetime.timedelta(hours=2), datetime.timedelta(days=1)
     )
 
-    client: CRUDClient[NewAlertModel, AlertOutModel] = CRUDClient(
+    client: CRUDClient[NewAlertModel, AlertPatchModel, AlertOutModel] = CRUDClient(
         "http://localhost:8000/api/alerts",
         AlertOutModel,
         headers={"X-API-KEY": token.token},

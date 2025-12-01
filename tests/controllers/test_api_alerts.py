@@ -22,7 +22,7 @@ from tests.conftest import BaseGiven, BaseWhen
 class CaseGiven(BaseGiven):
     def alert_api_client(
         self, test_client: AsyncTestClient[Litestar]
-    ) -> CRUDClient[NewAlertModel, AlertOutModel]:
+    ) -> CRUDClient[NewAlertModel, AlertPatchModel, AlertOutModel]:
         client = CRUDClient(
             "/api/alerts",
             AlertOutModel,
