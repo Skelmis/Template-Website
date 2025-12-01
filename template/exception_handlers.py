@@ -37,9 +37,9 @@ class APIErrorModel(BaseModel):
 def is_api_route(request: Request) -> bool:
     """Returns True if this occurred on an API route"""
     if (
-        hasattr(request, "route_handler")
-        and "is_api_route" in request.route_handler.opt
-        and request.route_handler.opt["is_api_route"] is True
+        "route_handler" in request.scope
+        and "is_api_route" in request.scope["route_handler"].opt
+        and request.scope["route_handler"].opt["is_api_route"] is True
     ):
         return True
     return False

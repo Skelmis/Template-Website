@@ -22,13 +22,10 @@ from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from litestar.template import TemplateConfig
 from litestar.types import Receive, Scope, Send, Empty
 from piccolo.engine import engine_finder
-from piccolo_admin.endpoints import create_admin, TableConfig
-from piccolo_api.crud.endpoints import OrderBy
-from piccolo_api.crud.hooks import HookType, Hook
-from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from template import constants
+from template.admin_portal import configure_piccolo_admin
 from template.constants import IS_PRODUCTION
 from template.controllers import AuthController, OAuthController
 from template.controllers.api import APIAlertController, APIAuthTokenController
@@ -44,11 +41,6 @@ from template.exception_handlers import (
 )
 from template.middleware import EnsureAuth
 from template.tables import (
-    Users,
-    OAuthEntry,
-    MagicLinks,
-    Alerts,
-    AuthenticationAttempts,
     APIToken,
 )
 from template.util.flash import inject_alerts
@@ -56,88 +48,9 @@ from template.util.flash import inject_alerts
 load_dotenv()
 
 
-def post_validate_password_changes(row: Users):
-    """Given we dont subclass BaseUser we need to patch this in"""
-    try:
-        row.split_stored_password(row.password)
-    except ValueError:
-        row._validate_password(row.password)
-        row.password = row.hash_password(row.password)
-
-    return row
-
-
-def patch_validate_password_changes(row_id: int, values: dict):
-    """Given we dont subclass BaseUser we need to patch this in"""
-    password: str | None = values.pop("password", None)
-    if not password:
-        return values
-
-    try:
-        Users.split_stored_password(password)
-    except ValueError:
-        Users._validate_password(password)
-        values["password"] = Users.hash_password(password)
-
-    return values
-
-
 @asgi("/admin/", is_mount=True, copy_scope=True)
 async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
-    alert_tc = TableConfig(Alerts, menu_group="Alerting")
-    user_tc = TableConfig(
-        Users,
-        menu_group="User Management",
-        hooks=[
-            Hook(hook_type=HookType.pre_save, callable=post_validate_password_changes),
-            Hook(
-                hook_type=HookType.pre_patch, callable=patch_validate_password_changes
-            ),
-        ],
-    )
-    oauth_entry_tc = TableConfig(OAuthEntry, menu_group="User Management")
-    auth_attempt_tc = TableConfig(AuthenticationAttempts, menu_group="Auditing")
-    magic_links_tc = TableConfig(
-        MagicLinks,
-        menu_group="User Management",
-        order_by=[
-            OrderBy(MagicLinks.id, ascending=False),
-        ],
-        exclude_visible_columns=[
-            MagicLinks.token,
-            MagicLinks.cookie,
-        ],
-    )
-    mfa_tc = TableConfig(
-        AuthenticatorSecret,
-        menu_group="User Management",
-        exclude_visible_columns=[
-            AuthenticatorSecret.secret,
-            AuthenticatorSecret.recovery_codes,
-            AuthenticatorSecret.last_used_code,
-        ],
-        order_by=[
-            OrderBy(AuthenticatorSecret.id, ascending=False),
-        ],
-    )
-
-    await create_admin(
-        tables=[
-            user_tc,
-            mfa_tc,
-            oauth_entry_tc,
-            magic_links_tc,
-            alert_tc,
-            auth_attempt_tc,
-        ],
-        production=IS_PRODUCTION,
-        allowed_hosts=constants.SERVING_DOMAIN,
-        sidebar_links={"Site root": "/", "API documentation": "/docs/"},
-        site_name=constants.SITE_NAME.rstrip() + " Admin",
-        auto_include_related=True,
-        mfa_providers=[constants.MFA_TOTP_PROVIDER],
-        auth_table=Users,  # type: ignore
-    )(scope, receive, send)
+    await configure_piccolo_admin()(scope, receive, send)
 
 
 async def open_database_connection_pool():
