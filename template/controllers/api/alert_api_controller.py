@@ -106,8 +106,8 @@ class APIAlertController[AlertOutModel](CRUDController):
     path = "/api/alerts"
     tags = ["Alerts"]
     META = crud_meta
-    # middleware = [UserFromAPIKey, rate_limit_config.middleware]
-    # security = [{"apiKey": []}]
+    middleware = [UserFromAPIKey, rate_limit_config.middleware]
+    security = [{"apiKey": []}]
 
     async def add_custom_where(
         self, request: Request[Users, APIToken, State], query: QueryT

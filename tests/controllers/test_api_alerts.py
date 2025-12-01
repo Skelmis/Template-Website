@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from typing import Self, Any
 
 import httpx
@@ -6,13 +7,15 @@ import pytest
 from litestar import Litestar
 from litestar.exceptions import NotFoundException
 from litestar.testing import AsyncTestClient
+from piccolo.columns import Column
 from piccolo.testing import ModelBuilder
 from piccolo.utils.sync import run_sync
 
-from api_client_impls.alerts import NewAlertModel, AlertOutModel
+from api_client_impls.alerts import NewAlertModel, AlertOutModel, AlertPatchModel
 from template.crud import CRUDClient
+from template.crud.controller import SearchModel, SearchItemIn, JoinModel
 from template.piccolo_migrations.home_2025_10_27t13_31_08_066636 import Users
-from template.tables import Alerts, APIToken
+from template.tables import Alerts, APIToken, AlertLevels
 from tests.conftest import BaseGiven, BaseWhen
 
 
@@ -38,10 +41,29 @@ class CaseWhen(BaseWhen):
     def contains_no_alerts(self):
         assert Alerts.count().run_sync() == 0
 
-    def contains_alerts(self, *, count: int, target: Users) -> list[Alerts]:
+    def contains_alerts(
+        self,
+        *,
+        count: int,
+        target: Users,
+        has_been_shown: bool = False,
+        message: str = None,
+    ) -> list[Alerts]:
         results = []
+        defaults: dict[Column, Any] = {
+            Alerts.target: target,
+            Alerts.has_been_shown: has_been_shown,
+        }
+        if message is not None:
+            defaults[Alerts.message] = message
+
         for _ in range(count):
-            results.append(ModelBuilder.build_sync(Alerts, defaults={"target": target}))
+            results.append(
+                ModelBuilder.build_sync(
+                    Alerts,
+                    defaults=defaults,
+                )
+            )
 
         return results
 
@@ -101,6 +123,16 @@ async def test_crud_client(test_client: AsyncTestClient[Litestar]):
 async def test_valid_get_object(test_client: AsyncTestClient[Litestar]):
     client = Given.user("skelmis").alert_api_client(test_client)
     result = When.db.contains_alerts(count=1, target=Given.user("skelmis").object)[0]
+
+    r_1 = await client.get_record(result.uuid)
+    assert r_1.uuid == result.uuid
+
+
+async def test_valid_get_object_as_admin(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis", admin=True).alert_api_client(test_client)
+    result = When.db.contains_alerts(count=1, target=Given.user("not_skelmis").object)[
+        0
+    ]
 
     r_1 = await client.get_record(result.uuid)
     assert r_1.uuid == result.uuid
@@ -172,4 +204,249 @@ async def test_delete_invalid_object(test_client: AsyncTestClient[Litestar]):
     assert await Alerts.count() == 1
 
 
-# TODO Add tests for POST, PATCH, Search
+async def test_create_new_alert(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    nam = NewAlertModel(
+        target=Given.user("skelmis").object.id, message="test", level=AlertLevels.INFO
+    )
+
+    await client.create_record(nam)
+    assert await Alerts.count() == 1
+
+    r_1: Alerts = await Alerts.objects(Alerts.target).first()
+    assert r_1.message == "test"
+    assert r_1.level == AlertLevels.INFO.value
+    assert r_1.target == Given.user("skelmis").object
+
+
+async def test_create_new_alert_other_target(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    nam = NewAlertModel(
+        target=Given.user("not_skelmis").object.id,
+        message="test",
+        level=AlertLevels.INFO,
+    )
+
+    await client.create_record(nam)
+    assert await Alerts.count() == 1
+
+    r_1: Alerts = await Alerts.objects(Alerts.target).first()
+    assert r_1.message == "test"
+    assert r_1.level == AlertLevels.INFO.value
+    assert r_1.target == Given.user("skelmis").object
+
+
+async def test_create_new_alert_other_target_admin(
+    test_client: AsyncTestClient[Litestar],
+):
+    client = Given.user("skelmis", admin=True).alert_api_client(test_client)
+    nam = NewAlertModel(
+        target=Given.user("not_skelmis").object.id,
+        message="test",
+        level=AlertLevels.INFO,
+    )
+
+    await client.create_record(nam)
+    assert await Alerts.count() == 1
+
+    r_1: Alerts = await Alerts.objects(Alerts.target).first()
+    assert r_1.message == "test"
+    assert r_1.level == AlertLevels.INFO.value
+    assert r_1.target == Given.user("not_skelmis").object
+
+
+async def test_patch_valid_object(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    result = When.db.contains_alerts(
+        count=1,
+        target=Given.user("skelmis").object,
+    )[0]
+
+    await client.patch_record(result.uuid, AlertPatchModel(has_been_shown=True))
+    assert await Alerts.count() == 1
+    r_1: Alerts = await Alerts.objects(Alerts.target).first()
+    assert r_1.has_been_shown is True
+
+
+async def test_patch_invalid_object(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    result = When.db.contains_alerts(
+        count=1,
+        target=Given.user("not_skelmis").object,
+    )[0]
+
+    with pytest.raises(httpx.HTTPStatusError) as e:
+        await client.patch_record(result.uuid, AlertPatchModel(has_been_shown=True))
+
+    assert e.value.response.status_code == 404
+
+
+async def test_patch_random_object(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    with pytest.raises(httpx.HTTPStatusError) as e:
+        await client.patch_record(uuid.uuid4(), AlertPatchModel(has_been_shown=True))
+
+    assert e.value.response.status_code == 404
+
+
+async def test_count(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    result = await client.get_total_record_count()
+    assert result.total_records == 0
+
+
+async def test_count_with_various_user_records(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    When.db.contains_alerts(count=1, target=Given.user("skelmis").object)
+    When.db.contains_alerts(count=1, target=Given.user("not_skelmis").object)
+    result = await client.get_total_record_count()
+    assert result.total_records == 1
+
+
+async def test_count_with_various_user_records_as_admin(
+    test_client: AsyncTestClient[Litestar],
+):
+    client = Given.user("skelmis", admin=True).alert_api_client(test_client)
+    When.db.contains_alerts(count=1, target=Given.user("skelmis").object)
+    When.db.contains_alerts(count=1, target=Given.user("not_skelmis").object)
+    result = await client.get_total_record_count()
+    assert result.total_records == 2
+
+
+async def test_basic_search(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    When.db.contains_alerts(
+        count=1, target=Given.user("skelmis").object, message="hello"
+    )
+    When.db.contains_alerts(
+        count=1, target=Given.user("skelmis").object, message="world"
+    )
+
+    results = await client.search_records_as_list(
+        SearchModel(
+            filters=[
+                SearchItemIn(
+                    column_name="message", operation="equals", search_value="hello"
+                )
+            ]
+        )
+    )
+    assert len(results) == 1
+
+    results = await client.search_records_as_list(
+        SearchModel(
+            filters=[
+                SearchItemIn(
+                    column_name="message",
+                    operation="not_equals",
+                    search_value="doesnt exist",
+                )
+            ]
+        )
+    )
+    assert len(results) == 2
+
+
+async def test_basic_or_search(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    When.db.contains_alerts(
+        count=1, target=Given.user("skelmis").object, message="hello"
+    )
+    When.db.contains_alerts(
+        count=1, target=Given.user("skelmis").object, message="world"
+    )
+
+    results = await client.search_records_as_list(
+        SearchModel(
+            filters=[
+                JoinModel(
+                    operand="or",
+                    filters=[
+                        SearchItemIn(
+                            column_name="message",
+                            operation="equals",
+                            search_value="hello",
+                        ),
+                        SearchItemIn(
+                            column_name="message",
+                            operation="equals",
+                            search_value="world",
+                        ),
+                    ],
+                )
+            ]
+        )
+    )
+    assert len(results) == 2
+
+
+async def test_basic_and_search(test_client: AsyncTestClient[Litestar]):
+    client = Given.user("skelmis").alert_api_client(test_client)
+    When.db.contains_alerts(
+        count=1, target=Given.user("skelmis").object, message="hello"
+    )
+    When.db.contains_alerts(
+        count=1,
+        target=Given.user("skelmis").object,
+        message="hello",
+        has_been_shown=True,
+    )
+    When.db.contains_alerts(
+        count=1, target=Given.user("not_skelmis").object, message="hello"
+    )
+
+    results = await client.search_records_as_list(
+        SearchModel(
+            filters=[
+                JoinModel(
+                    operand="and",
+                    filters=[
+                        SearchItemIn(
+                            column_name="message",
+                            operation="equals",
+                            search_value="hello",
+                        ),
+                        SearchItemIn(
+                            column_name="target",
+                            operation="equals",
+                            search_value=Given.user("skelmis").object.id,
+                        ),
+                    ],
+                )
+            ]
+        )
+    )
+    assert len(results) == 2
+
+    results = await client.search_records_as_list(
+        SearchModel(
+            filters=[
+                JoinModel(
+                    operand="and",
+                    filters=[
+                        SearchItemIn(
+                            column_name="message",
+                            operation="equals",
+                            search_value="hello",
+                        ),
+                        JoinModel(
+                            operand="and",
+                            filters=[
+                                SearchItemIn(
+                                    column_name="target",
+                                    operation="equals",
+                                    search_value=Given.user("skelmis").object.id,
+                                ),
+                                SearchItemIn(
+                                    column_name="has_been_shown",
+                                    operation="equals",
+                                    search_value=True,
+                                ),
+                            ],
+                        ),
+                    ],
+                )
+            ]
+        )
+    )
+    assert len(results) == 1
