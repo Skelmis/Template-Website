@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from http import HTTPMethod
+from sys import stderr
 from typing import TypeVar, Generic, Any
 
 import httpx
@@ -69,7 +70,11 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
             url = f"{url}&_next_cursor={next_cursor}"
 
         initial_response: httpx.Response = await self.client.get(url)
-        initial_response.raise_for_status()
+        try:
+            initial_response.raise_for_status()
+        except httpx.HTTPStatusError:
+            print(initial_response.text, file=stderr)
+            raise
         raw_data = initial_response.json()
         resp_data: GetAllResponseModel = GetAllResponseModel(
             next_cursor=raw_data["next_cursor"],
@@ -97,38 +102,62 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
 
     async def get_total_record_count(self) -> GetCountResponseModel:
         resp = await self.client.get("/meta/count")
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError:
+            print(resp.text, file=stderr)
+            raise
         return GetCountResponseModel(**resp.json())
 
     async def get_record(self, object_id: Any) -> MODEL_OUT:
         resp = await self.client.get(f"/{object_id}")
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError:
+            print(resp.text, file=stderr)
+            raise
         return self.dto_out(**resp.json())
 
     async def delete_record(self, object_id: Any) -> None:
-        delete_resp = await self.client.delete(f"/{object_id}")
-        delete_resp.raise_for_status()
+        resp = await self.client.delete(f"/{object_id}")
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError:
+            print(resp.text, file=stderr)
+            raise
         return None
 
     async def create_record(self, data: MODEL_IN) -> MODEL_OUT:
-        create_resp = await self.client.post(
+        resp = await self.client.post(
             "/",
             data=data.model_dump_json(),
         )
-        create_resp.raise_for_status()
-        return self.dto_out(**create_resp.json())
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError:
+            print(resp.text, file=stderr)
+            raise
+        return self.dto_out(**resp.json())
 
     async def patch_record(self, object_id: Any, data: MODEL_PATCH_IN) -> MODEL_OUT:
-        create_resp = await self.client.patch(
+        resp = await self.client.patch(
             f"/{object_id}",
             data=data.model_dump_json(exclude_unset=True),
         )
-        create_resp.raise_for_status()
-        return self.dto_out(**create_resp.json())
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError:
+            print(resp.text, file=stderr)
+            raise
+        return self.dto_out(**resp.json())
 
     async def get_search_filters(self) -> SearchRequestModel:
         resp = await self.client.get(f"/meta/search/filters")
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError:
+            print(resp.text, file=stderr)
+            raise
         return SearchRequestModel(**resp.json())
 
     async def search_records_as_list(
@@ -144,7 +173,11 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
             f"/search?_page_size={page_size}",
             data=search.model_dump_json(),
         )
-        initial_response.raise_for_status()
+        try:
+            initial_response.raise_for_status()
+        except httpx.HTTPStatusError:
+            print(initial_response.text, file=stderr)
+            raise
         raw_data = initial_response.json()
         resp_data: GetAllResponseModel = GetAllResponseModel(
             next_cursor=raw_data["next_cursor"],
@@ -158,7 +191,11 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
                 f"/search?_next_cursor={next_cursor}&_page_size={page_size}",
                 data=search.model_dump_json(),
             )
-            initial_response.raise_for_status()
+            try:
+                initial_response.raise_for_status()
+            except httpx.HTTPStatusError:
+                print(initial_response.text, file=stderr)
+                raise
             raw_data = initial_response.json()
             resp_data: GetAllResponseModel = GetAllResponseModel(
                 next_cursor=raw_data["next_cursor"],
