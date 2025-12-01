@@ -75,10 +75,25 @@ def patch_saq(monkeypatch) -> AsyncMock:
 class BaseGiven:
     data: dict[str, Any] = {}
 
-    def user(self, username: str) -> Self:
+    def user(
+        self,
+        username: str,
+        *,
+        admin: bool = False,
+        superuser: bool = False,
+        active: bool = True,
+    ) -> Self:
         if not Users.objects().get(Users.username == username).run_sync():
             self.data["user"] = run_sync(
-                ModelBuilder.build(Users, {Users.username: username})
+                ModelBuilder.build(
+                    Users,
+                    {
+                        Users.username: username,
+                        Users.admin: admin,
+                        Users.active: active,
+                        Users.superuser: superuser,
+                    },
+                )
             )
         else:
             self.data["user"] = (
