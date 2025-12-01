@@ -180,8 +180,12 @@ class APIAlertController[AlertOutModel](CRUDController):
         status_code=201,
     )
     async def create_object(
-        self, request: Request, data: NewAlertModel
+        self, request: Request[Users, APIToken, State], data: NewAlertModel
     ) -> AlertOutModel:
+        if not (request.user.admin or request.user.superuser):
+            # Only admins can target other users with alerts
+            data.target = request.user.id
+
         return await super().create_object(request, data)
 
     @patch(
