@@ -62,6 +62,14 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
         )
         self.dto_out: type[MODEL_OUT] = dto_out
 
+    # noinspection PyMethodMayBeStatic
+    def _raise_for_status(self, response: httpx.Response) -> None:
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            print(response.text, file=stderr)
+            raise
+
     async def get_record_page(
         self, page_size: int, next_cursor: str | None = None
     ) -> GetAllResponseModel:
@@ -70,11 +78,7 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
             url = f"{url}&_next_cursor={next_cursor}"
 
         initial_response: httpx.Response = await self.client.get(url)
-        try:
-            initial_response.raise_for_status()
-        except httpx.HTTPStatusError:
-            print(initial_response.text, file=stderr)
-            raise
+        self._raise_for_status(initial_response)
         raw_data = initial_response.json()
         resp_data: GetAllResponseModel = GetAllResponseModel(
             next_cursor=raw_data["next_cursor"],
@@ -102,29 +106,17 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
 
     async def get_total_record_count(self) -> GetCountResponseModel:
         resp = await self.client.get("/meta/count")
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            print(resp.text, file=stderr)
-            raise
+        self._raise_for_status(resp)
         return GetCountResponseModel(**resp.json())
 
     async def get_record(self, object_id: Any) -> MODEL_OUT:
         resp = await self.client.get(f"/{object_id}")
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            print(resp.text, file=stderr)
-            raise
+        self._raise_for_status(resp)
         return self.dto_out(**resp.json())
 
     async def delete_record(self, object_id: Any) -> None:
         resp = await self.client.delete(f"/{object_id}")
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            print(resp.text, file=stderr)
-            raise
+        self._raise_for_status(resp)
         return None
 
     async def create_record(self, data: MODEL_IN) -> MODEL_OUT:
@@ -132,11 +124,7 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
             "/",
             data=data.model_dump_json(),
         )
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            print(resp.text, file=stderr)
-            raise
+        self._raise_for_status(resp)
         return self.dto_out(**resp.json())
 
     async def patch_record(self, object_id: Any, data: MODEL_PATCH_IN) -> MODEL_OUT:
@@ -144,20 +132,12 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
             f"/{object_id}",
             data=data.model_dump_json(exclude_unset=True),
         )
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            print(resp.text, file=stderr)
-            raise
+        self._raise_for_status(resp)
         return self.dto_out(**resp.json())
 
     async def get_search_filters(self) -> SearchRequestModel:
         resp = await self.client.get(f"/meta/search/filters")
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            print(resp.text, file=stderr)
-            raise
+        self._raise_for_status(resp)
         return SearchRequestModel(**resp.json())
 
     async def search_records_as_list(
@@ -173,11 +153,7 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
             f"/search?_page_size={page_size}",
             data=search.model_dump_json(),
         )
-        try:
-            initial_response.raise_for_status()
-        except httpx.HTTPStatusError:
-            print(initial_response.text, file=stderr)
-            raise
+        self._raise_for_status(initial_response)
         raw_data = initial_response.json()
         resp_data: GetAllResponseModel = GetAllResponseModel(
             next_cursor=raw_data["next_cursor"],
@@ -191,11 +167,7 @@ class CRUDClient(Generic[MODEL_IN, MODEL_OUT]):
                 f"/search?_next_cursor={next_cursor}&_page_size={page_size}",
                 data=search.model_dump_json(),
             )
-            try:
-                initial_response.raise_for_status()
-            except httpx.HTTPStatusError:
-                print(initial_response.text, file=stderr)
-                raise
+            self._raise_for_status(initial_response)
             raw_data = initial_response.json()
             resp_data: GetAllResponseModel = GetAllResponseModel(
                 next_cursor=raw_data["next_cursor"],
