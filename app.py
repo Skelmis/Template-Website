@@ -34,6 +34,7 @@ from template.controllers import AuthController, OAuthController
 from template.controllers.api import APIAlertController, APIAuthTokenController
 from template.endpoints import (
     home,
+    mock_oauth,
 )
 from template.exception_handlers import (
     redirect_for_auth,
@@ -224,12 +225,14 @@ rate_limit_config = RateLimitConfig(
 )
 ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(
-        searchpath=os.path.join(os.path.dirname(__file__), "template", "templates")
+        searchpath=[
+            os.path.join(os.path.dirname(__file__), "template", "templates"),
+        ]
     ),
     autoescape=True,
 )
 template_config = TemplateConfig(
-    directory="home/templates",
+    directory="template/templates",
     engine=JinjaTemplateEngine.from_environment(ENVIRONMENT),
 )
 flash_plugin = FlashPlugin(
@@ -252,6 +255,8 @@ routes = [
 ]
 if constants.HAS_IMPLEMENTED_OAUTH:
     routes.append(OAuthController)  # type: ignore
+else:
+    routes.append(mock_oauth)
 
 app = Litestar(
     route_handlers=routes,
