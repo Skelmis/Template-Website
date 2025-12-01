@@ -109,7 +109,13 @@ class APIAlertController[AlertOutModel](CRUDController):
     # middleware = [UserFromAPIKey, rate_limit_config.middleware]
     # security = [{"apiKey": []}]
 
-    async def add_custom_where(self, request: Request, query: QueryT) -> QueryT:
+    async def add_custom_where(
+        self, request: Request[Users, APIToken, State], query: QueryT
+    ) -> QueryT:
+        if request.user.admin or request.user.superuser:
+            # Admins can access any object they want
+            return query
+
         # noinspection PyTypeChecker
         return query.where(Alerts.target == request.user)
 
