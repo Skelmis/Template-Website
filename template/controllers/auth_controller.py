@@ -52,7 +52,6 @@ class AuthController(Controller):
             return self._render_template(
                 request,
                 "auth/sign_in.jinja",
-                {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
                 status_code=400,
             )
 
@@ -66,7 +65,6 @@ class AuthController(Controller):
             return self._render_template(
                 request,
                 "auth/sign_in.jinja",
-                {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
                 status_code=400,
             )
 
@@ -140,6 +138,9 @@ class AuthController(Controller):
 
         if context is None:
             context = {}
+
+        if constants.USE_CF_TURNSTILE:
+            context["CF_TURNSTILE_SITE_KEY"] = constants.CF_TURNSTILE_SITE_KEY
 
         return html_template(
             template,
@@ -291,10 +292,7 @@ class AuthController(Controller):
         return self._render_template(
             request,
             "auth/sign_in_email.jinja",
-            {
-                "next_route": next_route,
-                "CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY,
-            },
+            {"next_route": next_route},
         )
 
     @post("/sign_in/magic_link")
@@ -474,7 +472,6 @@ class AuthController(Controller):
         return self._render_template(
             request,
             "auth/sign_in.jinja",
-            {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
         )
 
     @post("/sign_in/credentials")
@@ -549,7 +546,6 @@ class AuthController(Controller):
         return self._render_template(
             request,
             "auth/mfa_create.jinja",
-            {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
         )
 
     @get("/mfa/totp/create", name="create_totp_mfa", middleware=[])
@@ -568,7 +564,6 @@ class AuthController(Controller):
         return self._render_template(
             request,
             "auth/mfa_create.jinja",
-            {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
         )
 
     @post("/mfa/totp/create")
@@ -796,7 +791,6 @@ class AuthController(Controller):
         return self._render_template(
             request,
             "auth/sign_up.jinja",
-            {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
         )
 
     @post("/sign_up")
