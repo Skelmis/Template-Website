@@ -171,6 +171,13 @@ if constants.HAS_IMPLEMENTED_OAUTH:
 else:
     routes.append(mock_oauth)
 
+middleware = [
+    rate_limit_config.middleware,
+    session_config.middleware,
+]
+if constants.TRUSTED_PROXIES:
+    middleware.append(ProxyHeadersMiddleware)
+
 app = Litestar(
     route_handlers=routes,
     template_config=template_config,
@@ -240,11 +247,7 @@ app = Litestar(
     cors_config=cors_config,
     csrf_config=csrf_config,
     logging_config=logging_config,
-    middleware=[
-        rate_limit_config.middleware,
-        session_config.middleware,
-        ProxyHeadersMiddleware,
-    ],
+    middleware=middleware,
     plugins=[flash_plugin, OpenTelemetryPlugin(open_telemetry_config)],
     response_headers=[
         ResponseHeader(

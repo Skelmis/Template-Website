@@ -66,6 +66,7 @@ These are environment variables by default. If `(Infisical)` is shown, then they
 - `MAKE_FIRST_USER_ADMIN`: If truthy, makes the first user created admin. Just simplifies things. Defaults to `true`
 - `REQUIRE_MFA`: If truthy, enforce the usage of Multi-Factor Authentication (MFA) within auth flows. N.b due to platform limitations it won't be enforced if users only ever sign in via the admin portal. Defaults to `false`
 - `DONT_SEND_EMAILS`: If truthy, doesnt send emails. Useful for dev envs, defaults to `false`
+- `TRUSTED_PROXIES`: If truthy, trust proxy headers
 
 #### Deployment Hardening
 
