@@ -1,9 +1,12 @@
 import hmac
+import logging
 import secrets
 import typing
 import warnings
 from datetime import datetime, timedelta
 
+import commons
+import httpx
 from commons.hibp import has_password_been_pwned
 from litestar import Controller, Request, get, post
 from litestar.exceptions import SerializationException
@@ -11,6 +14,7 @@ from litestar.response import Redirect, Template
 from litestar.status_codes import HTTP_303_SEE_OTHER
 from piccolo_api.mfa.authenticator.tables import AuthenticatorSecret
 from piccolo_api.session_auth.tables import SessionsBase
+from tenacity import retry, stop_after_attempt, wait_random, retry_if_not_exception_type
 
 from template import constants
 from template.middleware import EnsureAuth
@@ -18,6 +22,8 @@ from template.tables import MagicLinks, Users, AuthenticationAttempts
 from template.util import alert, html_template
 from template.util.email import send_email
 from template.util.table_mixins import utc_now
+
+log = logging.getLogger(__name__)
 
 
 class AuthController(Controller):
@@ -33,6 +39,89 @@ class AuthController(Controller):
     include_in_schema = False
     account_lockout_period = timedelta(minutes=10)
     account_lockout_limit = 5
+
+    async def do_turnstile_checks(self, request: Request) -> Template | None:
+        body = await request.form()
+        token = body.get("turnstile-token", None)
+        if not token:
+            alert(
+                request,
+                "This route requires you to pass a Cloudflare challenge first. Please give it a go and try again.",
+                level="error",
+            )
+            return self._render_template(
+                request,
+                "auth/sign_in.jinja",
+                {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
+                status_code=400,
+            )
+
+        is_valid_turnstile = await self.validate_cf_turnstile_token(request, token)
+        if not is_valid_turnstile:
+            alert(
+                request,
+                "This route requires you to pass a Cloudflare challenge first. Please give it a go and try again.",
+                level="error",
+            )
+            return self._render_template(
+                request,
+                "auth/sign_in.jinja",
+                {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
+                status_code=400,
+            )
+
+        # This means it passed
+        return None
+
+    @staticmethod
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_random(min=1, max=2),
+        retry=retry_if_not_exception_type(ValueError)
+        | retry_if_not_exception_type(AssertionError),
+        reraise=True,
+    )
+    async def validate_cf_turnstile_token(request: Request, token: str) -> bool:
+        """Returns True if the token is valid"""
+        data = {
+            "secret": constants.CF_TURNSTILE_SECRET_KEY,
+            "response": token,
+        }
+        user_ip = request.client.host if request.client else None
+        if user_ip is not None:
+            data["remoteip"] = user_ip
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp: httpx.Response = await client.post(
+                    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                    json=data,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if (
+                    data["hostname"] not in constants.SERVING_DOMAIN
+                    and constants.IS_PRODUCTION
+                ):
+                    log.warning(
+                        "Someone found a way to get CF tokens from %s on ip %s",
+                        data["hostname"],
+                        user_ip,
+                    )
+                    return False
+
+                log.debug(
+                    "Cloudflare Turnstile response for IP %s",
+                    user_ip,
+                    extra={"CF_data": data},
+                )
+                return data["success"]
+        except (httpx.HTTPError, KeyError) as e:
+            log.error(
+                "Cloudflare Turnstile broke",
+                extra={"traceback": commons.exception_as_string(e)},
+            )
+            return False
 
     @classmethod
     def validate_next_route(cls, next_route: str) -> str:
@@ -200,7 +289,12 @@ class AuthController(Controller):
         next_route: str = "/",
     ) -> Template:
         return self._render_template(
-            request, "auth/sign_in_email.jinja", {"next_route": next_route}
+            request,
+            "auth/sign_in_email.jinja",
+            {
+                "next_route": next_route,
+                "CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY,
+            },
         )
 
     @post("/sign_in/magic_link")
@@ -232,6 +326,11 @@ class AuthController(Controller):
                 request, "Sorry, we currently don't allow registration", level="error"
             )
             return Redirect(request.url_for("sign_in_email"))
+
+        if constants.USE_CF_TURNSTILE:
+            result = await self.do_turnstile_checks(request)
+            if result is not None:
+                return result
 
         await AuthenticationAttempts.create_via_email(email, "magic_link")
         if await AuthenticationAttempts.has_exceeded_limits(
@@ -372,7 +471,11 @@ class AuthController(Controller):
 
     @get("/sign_in/credentials", name="sign_in")
     async def sign_in_get(self, request: Request, next_route: str = "/") -> Template:
-        return self._render_template(request, "auth/sign_in.jinja")
+        return self._render_template(
+            request,
+            "auth/sign_in.jinja",
+            {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
+        )
 
     @post("/sign_in/credentials")
     async def sign_in_post(
@@ -381,6 +484,12 @@ class AuthController(Controller):
         next_route: str = "/",
     ) -> Template | Redirect:
         username, password, mfa = await self.details_from_body(request)
+
+        if constants.USE_CF_TURNSTILE:
+            result = await self.do_turnstile_checks(request)
+            if result is not None:
+                return result
+
         await AuthenticationAttempts.create_via_username(username, "credentials")
         if await AuthenticationAttempts.has_exceeded_limits(
             username, self.account_lockout_limit, self.account_lockout_period
@@ -437,7 +546,11 @@ class AuthController(Controller):
             # MFA must be explicitly deleted before we will allow another one to be configured
             return self._render_template(request, "auth/mfa_configure.jinja")
 
-        return self._render_template(request, "auth/mfa_create.jinja")
+        return self._render_template(
+            request,
+            "auth/mfa_create.jinja",
+            {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
+        )
 
     @get("/mfa/totp/create", name="create_totp_mfa", middleware=[])
     async def totp_mfa_create_get(self, request: Request) -> Template | Redirect:
@@ -452,10 +565,19 @@ class AuthController(Controller):
             )
             return Redirect(request.url_for("manage_totp_mfa"))
 
-        return self._render_template(request, "auth/mfa_create.jinja")
+        return self._render_template(
+            request,
+            "auth/mfa_create.jinja",
+            {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
+        )
 
     @post("/mfa/totp/create")
     async def totp_mfa_create(self, request: Request) -> Template | Redirect:
+        if constants.USE_CF_TURNSTILE:
+            result = await self.do_turnstile_checks(request)
+            if result is not None:
+                return result
+
         username, password, _ = await self.details_from_body(request)
         user, response = await self.get_user_for_creds(request, username, password)
         if response is not None:
@@ -566,6 +688,7 @@ class AuthController(Controller):
 
     @post("/passwords/forgot")
     async def forgot_password_post(self, request: Request) -> Redirect:
+        # TODO CF Turnstile copy paste
         return Redirect(request.url_for("forgot_password"))
 
     @get(
@@ -670,7 +793,11 @@ class AuthController(Controller):
                 "Sign ups are disabled. This will do nothing.",
                 level="warning",
             )
-        return self._render_template(request, "auth/sign_up.jinja")
+        return self._render_template(
+            request,
+            "auth/sign_up.jinja",
+            {"CF_TURNSTILE_SITE_KEY": constants.CF_TURNSTILE_SITE_KEY},
+        )
 
     @post("/sign_up")
     async def sign_up_post(
@@ -679,6 +806,11 @@ class AuthController(Controller):
     ) -> Template | Redirect:
         if not constants.ALLOW_REGISTRATION:
             return Redirect(request.url_for("sign_up"))
+
+        if constants.USE_CF_TURNSTILE:
+            result = await self.do_turnstile_checks(request)
+            if result is not None:
+                return result
 
         # Some middleware (for example CSRF) has already awaited the request
         # body, and adds it to the request.

@@ -117,11 +117,21 @@ MAGIC_LINK_VALIDITY_WINDOW = timedelta(minutes=5)
 HAS_IMPLEMENTED_OAUTH = value_to_bool(os.environ.get("HAS_IMPLEMENTED_OAUTH", False))
 """Set to True if `oauth_controller.py` has been setup and configured to work."""
 
+TRUSTED_PROXIES = value_to_bool(os.environ.get("TRUSTED_PROXIES", False))
+"""Trust proxy headers"""
+
 HAS_IMPLEMENTED_MAGIC_LINK = value_to_bool(
     os.environ.get("HAS_IMPLEMENTED_MAGIC_LINK", False)
 )
 """Set to True if emails are configured to work."""
 
+# CloudFlare Turnstile configuration items
+CF_TURNSTILE_SITE_KEY = None
+CF_TURNSTILE_SECRET_KEY = None
+USE_CF_TURNSTILE = value_to_bool(os.environ.get("USE_CF_TURNSTILE", False))
+if USE_CF_TURNSTILE:
+    CF_TURNSTILE_SITE_KEY = get_secret("CF_TURNSTILE_SITE_KEY", infisical_client)
+    CF_TURNSTILE_SECRET_KEY = get_secret("CF_TURNSTILE_SECRET_KEY", infisical_client)
 
 SESSION_KEY = bytes.fromhex(get_secret("SESSION_KEY", infisical_client))
 CSRF_TOKEN = get_secret("CSRF_TOKEN", infisical_client)

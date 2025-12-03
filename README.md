@@ -67,6 +67,9 @@ These are environment variables by default. If `(Infisical)` is shown, then they
 - `REQUIRE_MFA`: If truthy, enforce the usage of Multi-Factor Authentication (MFA) within auth flows. N.b due to platform limitations it won't be enforced if users only ever sign in via the admin portal. Defaults to `false`
 - `DONT_SEND_EMAILS`: If truthy, doesnt send emails. Useful for dev envs, defaults to `false`
 - `TRUSTED_PROXIES`: If truthy, trust proxy headers
+- `USE_CF_TURNSTILE`: If truthy, puts CloudFlare Turnstile on Magic Link and password auth pages
+- `CF_TURNSTILE_SITE_KEY`: When `USE_CF_TURNSTILE` is set, this is your CF Turnstile site key
+- `CF_TURNSTILE_SECRET_KEY`: When `USE_CF_TURNSTILE` is set, this is your CF Turnstile secret key
 
 #### Deployment Hardening
 
