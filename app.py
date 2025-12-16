@@ -50,6 +50,8 @@ load_dotenv()
 
 @asgi("/admin/", is_mount=True, copy_scope=True)
 async def admin(scope: "Scope", receive: "Receive", send: "Send") -> None:
+    request = Request(scope, receive, send)
+    await EnsureAuth.get_user_from_connection(request, possible_redirect="/admin/")
     await configure_piccolo_admin()(scope, receive, send)
 
 
