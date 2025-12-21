@@ -7,7 +7,7 @@ from litestar.config.cors import CORSConfig
 from litestar.config.csrf import CSRFConfig
 from litestar.contrib.jinja import JinjaTemplateEngine
 from litestar.contrib.opentelemetry import OpenTelemetryPlugin, OpenTelemetryConfig
-from litestar.datastructures import ResponseHeader
+from litestar.datastructures import ResponseHeader, State
 from litestar.exceptions import NotFoundException
 from litestar.middleware.rate_limit import RateLimitConfig
 from litestar.middleware.session.client_side import CookieBackendConfig
@@ -21,6 +21,7 @@ from litestar.static_files import StaticFilesConfig
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from litestar.template import TemplateConfig
 from litestar.types import Receive, Scope, Send, Empty
+from opentelemetry import trace
 from piccolo.engine import engine_finder
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -42,6 +43,7 @@ from template.exception_handlers import (
 from template.middleware import EnsureAuth
 from template.tables import (
     APIToken,
+    Users,
 )
 from template.util.flash import inject_alerts
 
@@ -69,6 +71,32 @@ async def close_database_connection_pool():
         await engine.close_connection_pool()
     except Exception:
         print("Unable to connect to the database")
+
+
+async def before_request(request: Request) -> dict[str, str] | None:
+    await inject_alerts_on_ui_view(request)
+    await inject_user_into_trace(request)
+    return None
+
+
+async def inject_user_into_trace(
+    request: Request[Users, APIToken | None, State],
+) -> None:
+    if "user" not in request.scope or ("user" in request.scope and not request.user):
+        # No user on request
+        return None
+
+    current_span = trace.get_current_span()
+    if not current_span:
+        return None
+
+    current_span.set_attribute("user.id", request.user.id)
+    current_span.set_attribute("user.email", request.user.email)
+
+    if "auth" in request.scope and isinstance(request.scope["auth"], APIToken):
+        current_span.set_attribute("user.api_token.id", request.auth.id)  # type: ignore
+
+    return None
 
 
 async def inject_alerts_on_ui_view(request: Request) -> dict[str, str] | None:
@@ -101,6 +129,9 @@ async def inject_alerts_on_ui_view(request: Request) -> dict[str, str] | None:
 
 logging_config = None
 if constants.IS_PRODUCTION:
+    constants.configure_otel()
+
+elif constants.ENFORCE_OTEL:
     constants.configure_otel()
 
 else:
@@ -282,5 +313,5 @@ app = Litestar(
         ),
     ],
     exception_handlers=exception_handlers,
-    before_request=inject_alerts_on_ui_view,
+    before_request=before_request,
 )

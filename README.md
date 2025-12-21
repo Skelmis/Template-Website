@@ -63,6 +63,7 @@ These are environment variables by default. If `(Infisical)` is shown, then they
 
 - `SITE_NAME`: The name of the site to use in navbar, admin panel etc. Defaults to `Template Website`
 - `DEBUG`: If set to a truthy value, dump tracebacks etc on error. Defaults to `false`
+- `ENFORCE_OTEL`: If set to a truthy value, configure OTEL for usage regardless of environment. Defaults to `false`
 - `ALLOW_REGISTRATION`: Whether to let user's self sign up for accounts on the platform. Defaults to `true`. If you want to disable this, set it to `false`.
 - `DISABLE_HIBP`: If set to a truthy value, bypass the Have I Been Pwned checks on passwords. Defaults to `false`.
 - `MAKE_FIRST_USER_ADMIN`: If truthy, makes the first user created admin. Just simplifies things. Defaults to `true`

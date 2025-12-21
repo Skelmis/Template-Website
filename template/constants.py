@@ -97,6 +97,9 @@ SITE_NAME: str = os.environ.get("SITE_NAME", "Template Website")
 IS_PRODUCTION: bool = not value_to_bool(os.environ.get("DEBUG"))
 """Are we in production?"""
 
+ENFORCE_OTEL: bool = value_to_bool(os.environ.get("ENFORCE_OTEL"))
+"""Force OTEL usage, good for local debugging."""
+
 ALLOW_REGISTRATION: bool = value_to_bool(os.environ.get("ALLOW_REGISTRATION", True))
 """Whether users should be allowed to create new accounts."""
 
