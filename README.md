@@ -18,7 +18,7 @@ Features:
 - [Tabler](https://tabler.io/admin-template) based CSS
 - Content Security Policy and Cross-Site Scripting mitigations by default
 - Secrets management via [Infisical](https://infisical.com/)
-- Logging via [OpenObserve](https://openobserve.ai/) using Open Telemetry for both logs and traces
+- Logging via [SigNoz](https://signoz.io/) using Open Telemetry for both logs and traces
 
 ### Usage
 
@@ -43,9 +43,11 @@ These are environment variables by default. If `(Infisical)` is shown, then they
 - `INFISICAL_SECRET`: The client secret for Infisical auth
 - `CSRF_TOKEN` (Infisical): The token to use as the CSRF secret.
 - `SESSION_KEY` (Infisical): Must have a length of 16 (128 bits), 24 (192 bits) or 32 (256 bits) characters. Stored as hex.
-- `LOGOO_STREAM` (Infisical): OpenObserve logging stream.
-- `LOGOO_USER` (Infisical): OpenObserve username.
-- `LOGOO_PASSWORD` (Infisical): OpenObserve password.
+- `OTEL_ENDPOINT` (Infisical): Base URL for Open Telemetry.
+- `OTEL_BEARER` (Infisical): Bearer token for Open Telemetry collector auth.
+- `OTEL_DEPLOYMENT_ENVIRONMENT` (Infisical): Env to log against.
+- `OTEL_SERVICE_NAME` (Infisical): Service name to log against.
+- `OTEL_HOST` (Infisical): Host running the service
 - `ENCRYPTION_KEY` (Infisical): An encryption key used to do things such as encrypt MFA secrets. See [here](https://piccolo-admin.readthedocs.io/en/latest/mfa/index.html#example) for how to generate.
 - `POSTGRES_DB`: The Postgres database to use.
 - `POSTGRES_USER`: The Postgres user to auth as.
@@ -88,7 +90,7 @@ If you encounter security issues when deploying in environments that meet the ab
 
 _This project is catered to my tech stack. Here are some common gotchas you may encounter_
 
-#### I don't run OpenObserve
+#### I don't run SigNoz
 
 If you change the following code to suggested then it'll just work.
 ```python

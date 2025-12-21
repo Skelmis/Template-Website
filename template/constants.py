@@ -1,20 +1,27 @@
-import base64
 import logging
 import os
 import re
-from copy import deepcopy
 from datetime import timedelta
+from typing import Literal, cast
 
 from commons import value_to_bool
 from dotenv import load_dotenv
 from infisical_sdk import InfisicalSDKClient
-from opentelemetry import trace
+from opentelemetry import trace, metrics
 from opentelemetry._logs import set_logger_provider
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics._internal.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import (
+    SERVICE_NAME,
+    Resource,
+    DEPLOYMENT_ENVIRONMENT,
+    HOST_NAME,
+)
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from piccolo_api.encryption.providers import XChaCha20Provider
@@ -29,41 +36,49 @@ infisical_client.auth.universal_auth.login(
 
 
 def configure_otel():
-    # Service name is required for most backends
-    stream = get_secret("LOGOO_STREAM", infisical_client)
-    resource = Resource(attributes={SERVICE_NAME: stream})
-    trace_provider = TracerProvider(resource=resource)
-    log_url = "https://logs.skelmis.co.nz/api/default/v1/logs"
-    trace_url = "https://logs.skelmis.co.nz/api/default/v1/traces"
-    headers = {
-        "Authorization": f"Basic {
-        base64.b64encode(
-            bytes(
-                get_secret("LOGOO_USER", infisical_client) 
-                + ":" + get_secret("LOGOO_PASSWORD", infisical_client)
-                , "utf-8")
-        ).decode("utf-8")}"
+    host = get_secret("OTEL_HOST", infisical_client)
+    endpoint = get_secret("OTEL_ENDPOINT", infisical_client)
+    bearer_token = get_secret("OTEL_BEARER", infisical_client)
+    service_name = get_secret("OTEL_SERVICE_NAME", infisical_client)
+    deployment_environment: Literal["Production", "Development", "Staging"] = cast(
+        Literal["Production", "Development", "Staging"],
+        get_secret("OTEL_DEPLOYMENT_ENVIRONMENT", infisical_client),
+    )
+    headers = {"Authorization": f"Bearer {bearer_token}"}
+    attributes = {
+        SERVICE_NAME: service_name,
+        DEPLOYMENT_ENVIRONMENT: deployment_environment,
+        HOST_NAME: host,
     }
-    trace_exporter = OTLPSpanExporter(endpoint=trace_url, headers=headers)
-    span_processor = BatchSpanProcessor(trace_exporter)
-    trace_provider.add_span_processor(span_processor)
-    # Sets the global default tracer provider
-    trace.set_tracer_provider(trace_provider)
+    resource = Resource.create(attributes=attributes)
 
+    # Setup TracerProvider for trace correlation
+    trace_provider = TracerProvider(resource=resource)
+    trace.set_tracer_provider(trace_provider)
+    trace_provider.add_span_processor(
+        BatchSpanProcessor(
+            OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces", headers=headers)
+        )
+    )
+
+    reader = PeriodicExportingMetricReader(
+        OTLPMetricExporter(endpoint=f"{endpoint}/v1/metrics", headers=headers)
+    )
+    meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
+    metrics.set_meter_provider(meter_provider)
+
+    # Configure logger provider
     logger_provider = LoggerProvider(resource=resource)
     set_logger_provider(logger_provider)
-    log_headers = deepcopy(headers)
-    log_headers["stream-name"] = stream
-    log_exporter = OTLPLogExporter(endpoint=log_url, headers=log_headers)
-    log_batch = BatchLogRecordProcessor(log_exporter)
-    logger_provider.add_log_record_processor(log_batch)
+
+    # Add OTLP exporter (reads endpoint/headers from environment variables)
+    exporter = OTLPLogExporter(endpoint=f"{endpoint}/v1/logs", headers=headers)
+    logger_provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
+
+    # Attach OTel handler to Python's root logger
     handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
-    logging.basicConfig(
-        handlers=[handler],
-        level=logging.DEBUG,
-        format="%(message)s",
-        datefmt="%I:%M:%S %p %d/%m/%Y",
-    )
+    logging.getLogger().addHandler(handler)
+    logging.getLogger().setLevel(logging.INFO)
 
 
 def get_secret(secret_name: str, infisical_client: InfisicalSDKClient) -> str:
