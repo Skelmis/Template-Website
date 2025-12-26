@@ -28,7 +28,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from template import constants
 from template.admin_portal import configure_piccolo_admin
 from template.constants import IS_PRODUCTION
-from template.controllers import AuthController, OAuthController
+from template.controllers import AuthController
 from template.controllers.api import APIAlertController, APIAuthTokenController
 from template.endpoints import (
     home,
@@ -200,7 +200,9 @@ routes = [
     APIAuthTokenController,
 ]
 if constants.HAS_IMPLEMENTED_OAUTH:
-    routes.append(OAuthController)  # type: ignore
+    from template.controllers.oauth_controller import OAuthController
+
+    routes.append(OAuthController)
 else:
     routes.append(mock_oauth)
 
