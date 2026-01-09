@@ -40,7 +40,9 @@ class AuthController(Controller):
     account_lockout_period = timedelta(minutes=10)
     account_lockout_limit = 5
 
-    async def do_turnstile_checks(self, request: Request) -> Template | None:
+    async def do_turnstile_checks(
+        self, request: Request, template: str
+    ) -> Template | None:
         body = await request.form()
         token = body.get("turnstile-token", None)
         if not token:
@@ -51,7 +53,7 @@ class AuthController(Controller):
             )
             return self._render_template(
                 request,
-                "auth/sign_in.jinja",
+                template,
                 status_code=400,
             )
 
@@ -64,7 +66,7 @@ class AuthController(Controller):
             )
             return self._render_template(
                 request,
-                "auth/sign_in.jinja",
+                template,
                 status_code=400,
             )
 
@@ -326,7 +328,7 @@ class AuthController(Controller):
             return Redirect(request.url_for("sign_in_email"))
 
         if constants.USE_CF_TURNSTILE:
-            result = await self.do_turnstile_checks(request)
+            result = await self.do_turnstile_checks(request, "auth/sign_in_email.jinja")
             if result is not None:
                 return result
 
@@ -483,7 +485,7 @@ class AuthController(Controller):
         username, password, mfa = await self.details_from_body(request)
 
         if constants.USE_CF_TURNSTILE:
-            result = await self.do_turnstile_checks(request)
+            result = await self.do_turnstile_checks(request, "auth/sign_in.jinja")
             if result is not None:
                 return result
 
@@ -569,7 +571,7 @@ class AuthController(Controller):
     @post("/mfa/totp/create")
     async def totp_mfa_create(self, request: Request) -> Template | Redirect:
         if constants.USE_CF_TURNSTILE:
-            result = await self.do_turnstile_checks(request)
+            result = await self.do_turnstile_checks(request, "auth/mfa_create.jinja")
             if result is not None:
                 return result
 
@@ -802,7 +804,7 @@ class AuthController(Controller):
             return Redirect(request.url_for("sign_up"))
 
         if constants.USE_CF_TURNSTILE:
-            result = await self.do_turnstile_checks(request)
+            result = await self.do_turnstile_checks(request, "auth/sign_up.jinja")
             if result is not None:
                 return result
 
